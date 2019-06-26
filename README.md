@@ -1,13 +1,13 @@
-[![Build Status](https://travis-ci.org/WebAssembly/function-references.svg?branch=master)](https://travis-ci.org/WebAssembly/function-references)
+[![Build Status](https://travis-ci.org/WebAssembly/proposal-type-imports.svg?branch=master)](https://travis-ci.org/WebAssembly/proposal-type-imports)
 
-# Function Reference Types Proposal for WebAssembly
+# Type Imports Proposal for WebAssembly
 
 This repository is a clone of [github.com/WebAssembly/spec/](https://github.com/WebAssembly/spec/).
-It is meant for discussion, prototype specification and implementation of a proposal to add support for basic function reference types to WebAssembly.
+It is meant for discussion, prototype specification and implementation of a proposal to add support for type imports and exports to WebAssembly.
 
-* See the [overview](proposals/function-references/Overview.md) for a summary of the proposal.
+* See the [overview](proposals/type-imports/Overview.md) for a summary of the proposal.
 
-* See the [modified spec](https://webassembly.github.io/function-references/core) for details.  (Note, link is 404.)
+* See the [modified spec](https://webassembly.github.io/proposal-type-imports/core/) for details.
 
 Original `README` from upstream repository follows...
 
