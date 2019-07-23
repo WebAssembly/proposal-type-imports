@@ -4,7 +4,7 @@
 
 ### Motivation
 
-With [reference types](https://github.com/WebAssembly/reference-types)), the type `anyref` can be used to pass *host references* to Wasm code and back.
+With [reference types](https://github.com/WebAssembly/reference-types), the type `anyref` can be used to pass *host references* to Wasm code and back.
 However, being a top type, such references are essentially untyped.
 Consequently, a host API needs to perform runtime type checks for each reference that is passed to it.
 
