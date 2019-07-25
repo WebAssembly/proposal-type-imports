@@ -86,7 +86,7 @@ Both these proposals are prerequisites.
 #### Exports
 
 * `type <constype>` is an export description
-  - `exportdesc ::= ... | type <consttype>`
+  - `exportdesc ::= ... | type <constype>`
   - `(type <constype>) ok` iff `<constype> ok`
 
 Note: `<constype>` is defined in the [typed function references proposal](https://github.com/WebAssembly/function-references). It is either a type index or a predefined type like `any`, `func`, etc.
