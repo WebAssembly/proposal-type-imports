@@ -86,8 +86,8 @@ Both these proposals are prerequisites.
 #### Exports
 
 * `type <typeidx>` is an export description
-  - `exportdesc ::= ... | type <typeidx>`
-  - `(type $t) ok` iff `$t` is defined in the context
+  - `exportdesc ::= ... | type <consttype>`
+  - `(type <constype>) ok` iff `<constype> ok`
 
 
 #### Subtyping
