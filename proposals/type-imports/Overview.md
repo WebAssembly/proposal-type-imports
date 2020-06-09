@@ -21,18 +21,18 @@ Such an import can only be instantiated by a type that actually is a subtype.
 
 * This proposal is based on the [reference types proposal](https://github.com/WebAssembly/reference-types) and the [typed function references proposal](https://github.com/WebAssembly/function-references).
 
-* Add a new form of import, `(import "..." "..." (type $t))`, that allows importing a type definition abstractly
+* Add a new form of import, `(import "..." "..." (type $t (sub <heaptype>)))`, that allows importing a type definition abstractly.
 
-* Add a new form of export, `(export "..." (type $t))`, that allows exporting a type definition
+* The subtyping bounds on a type import restrict possible instantiations.
 
-* Allow subtyping bounds on a type import, as in `(import "..." "..." (type $t (sub $t')))`, that restrict possible instantiations
+* Add a new form of export, `(export "..." (type <heaptype>))`, that allows exporting a type definition.
 
 
 ### Examples
 
 Imagine an API for file operations. It could provide a type of file descriptors and operations on them that could be imported as follows:
 ```wasm
-(import "file" "File" (type $File))
+(import "file" "File" (type $File extern))
 (import "file" "open" (func $open (param $name i32) (result (ref $File))))
 (import "file" "read_byte" (func $read (param (ref $File)) (result i32)))
 (import "file" "close" (func $close (param (ref $File))))
@@ -57,9 +57,9 @@ the Wasm type system would guarantee the invariant that any reference passed to 
 
 Based on the following proposals:
 
-* [reference types](https://github.com/WebAssembly/reference-types), which introduces type `anyref` etc.
+* [reference types](https://github.com/WebAssembly/reference-types), which introduces general _reference types_.
 
-* [typed function references](https://github.com/WebAssembly/function-references), which introduces types `(ref $t)` and `(optref $t)` etc.
+* [typed function references](https://github.com/WebAssembly/function-references), which introduces concrete reference types `(ref $t)` and the notion of _heap types_.
 
 Both these proposals are prerequisites.
 
@@ -73,23 +73,22 @@ Both these proposals are prerequisites.
   - Note: `type` may get additional parameters in the future
 
 * `typetype` describes the type of a type import, as an upper bound
-  - `typetype ::= sub <constype>`
-  - `(sub <constype>) ok` iff `<constype> <: any`
-  - Note: the side condition ensures that bounds do not form a non-productive cycle (technicality: requires tweaking spec of subyping any)
+  - `typetype ::= sub <heaptype>`
+  - `(sub <heaptype>) ok` iff `<heaptype> ok`
   - Note: the bound can be a function type
   - Note: there may be other kinds of type descriptions in the future
+  - Note: there has to be an additional module-level side condition ensuring that bounds do not form a non-productive cycle
 
 * Type imports have indices prepended to the type index space, similar to other imports.
   - Note: due to bounds, type imports can be mutually recursive with other type imports as well as regular type definitions. Hence they have to be validated together with the type section.
 
+Note: `<heaptype>` is defined in the [typed function references proposal](https://github.com/WebAssembly/function-references). It is either a type index or an abstract type like `func`, `extern`, etc.
 
 #### Exports
 
-* `type <constype>` is an export description
-  - `exportdesc ::= ... | type <constype>`
-  - `(type <constype>) ok` iff `<constype> ok`
-
-Note: `<constype>` is defined in the [typed function references proposal](https://github.com/WebAssembly/function-references). It is either a type index or a predefined type like `any`, `func`, etc.
+* `type <heaptype>` is an export description
+  - `exportdesc ::= ... | type <heaptype>`
+  - `(type <heaptype>) ok` iff `<heaptype> ok`
 
 
 #### Subtyping
@@ -99,8 +98,13 @@ Greatest fixpoint (co-inductive interpretation) of the given rules (implying ref
 The following rule extends the rules for [typed references](https://github.com/WebAssembly/function-references/proposals/function-references/Overview.md#subtyping):
 
 * Imported types are subtypes of their bounds
-  - `$t <: <constype>`
-    - iff `$t = import (sub <constype>)`
+  - `(type $t) <: <heaptype>`
+    - iff `$t = import (sub <heaptype>)`
+
+
+#### Instantiation
+
+* A type import can be instantiated only with a type that is a subtype of the specified import bound.
 
 
 ## Binary Format
