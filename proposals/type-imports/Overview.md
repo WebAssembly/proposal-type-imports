@@ -34,7 +34,7 @@ such an import can be instantiated with both an `extern` type provided by the ho
 
 Type _exports_ are transparent by default.
 When using a type export to instantiate the import of another module,
-its full definition is therefor available to verify any import constraints.
+its full definition is therefore available to verify any import constraints.
 
 However, it also ought to be possible to make type exports opaque,
 in order to *encapsulate* their definition (akin to an abstract data type).
