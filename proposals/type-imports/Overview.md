@@ -214,6 +214,7 @@ The Wasm semantics potentially performs runtime type checks in at least two plac
 * `ref.test`/`ref.cast`, to compare source and target type (GC proposal)
 
 In both these cases, a private type is differentiated from its representation. That is, when defining `(type $t (private i32))`, the reference type `(ref $t)` is unrelated to `(ref i32)` (if that existed).
+Likewise, two private types are always distinct from each other, such that invoking `rtt.canon` with to distinct private types creates distinct runtime types.
 
 At the same time, `$t` is still a subtype of `any`, and can e.g. be used in place of an unconstrained type import, like with the file module example above.
 Moreover, this implies that `(ref $t)` is a subtype of `(ref any)`, so that the latter could be downcast to the former under the GC proposal.
