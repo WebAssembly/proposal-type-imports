@@ -14,7 +14,7 @@ However, there are two shortcomings of `externref`:
    That makes its use undesirable at import boundaries,
    where it should be possible to implement any import by either the host or another Wasm module alike.
 
-This proposal therefor allows Wasm modules to *import* type definitions.
+This proposal therefore allows Wasm modules to *import* type definitions.
 That way, the host can provide custom types and by importing them, client Wasm code can form [typed references](https://github.com/WebAssembly/function-references) `(ref $t)` to them.
 Based on that, a host API can provide functions that expect such typed references and Wasm's type soundness ensures that their type is always satisfied and no runtime check is required on the host side.
 
@@ -46,7 +46,7 @@ There are several requirements for opaque type definitions (called "private" in 
 
 * Encapsulated values must be compatible with unconstrained imports, i.e, type `any`, such that a private type can be used to implement a type import.
 
-* Yet, encapsulation must not get in the way of runtime type checks. For example, it must remain possible to `call_indirect` a function with an private type among its parameters (this essentially is a higher-order cast).
+* Yet, encapsulation must not get in the way of runtime type checks. For example, it must remain possible to `call_indirect` a function with a private type among its parameters (this essentially is a higher-order cast).
 
 * In a similar vein, encapsulation must be forward-compatible with the addition of explicit casts. It ought to be possible to inject an encapsulated value into `anyref` and cast it back, in order for private types to participate in the same anyref-based type escape hatches as other references, and to avoid more complicated type system machinery. That is, it must be possible to compare with or cast _to_ a private type, but not _through_ it.
 
@@ -65,7 +65,7 @@ However, the design presented here does not enable the formation of cycles, so t
 
 * Inversely, a new form of *type export*, `(export "..." (type <heaptype>))` allows exporting a type definition.
 
-* A new form of *private type* definition, `(type $t (private <valtype>))` allows the definition of types whose definition is hidden outside the exporting module.
+* A new form of *private type* definition, `(type $t (private <valtype>*))` allows the definition of types whose definition is hidden outside the exporting module.
 
 * Private types can only be constructed and deconstructed with the pair of instructions `private.new $t`, `private.get $t`, which only validate within the module defining private type `$t`.
 
@@ -179,7 +179,7 @@ Based on the following prerequisite proposals:
 * `type <heaptype>` is an export description
   - `exportdesc ::= ... | type <heaptype>`
   - `(type <heaptype>) ok` iff `<heaptype> ok`
-  - the definition of a every export type is transparently visible outside the module, except if it is defined as a private type
+  - the definition of an export type is transparently visible outside the module, except if it is defined as a private type
 
 Question: This does not allow exposing the definition of a private type to cooperating "friend" modules.
 As a more flexible alternative, hiding the definition could be optional via an explicit annotation on type exports.
