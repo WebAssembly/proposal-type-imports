@@ -52,7 +52,7 @@ There are several requirements for opaque type definitions (called "private" in 
 
 Together, these requirements and goals necessitate that (1) private types are nominal, in order to distinguish them from one another, (2) values of private type share a representation with other reference types, in order to make private types suitable for imports, and (3) these values have a distinguished representation that maintains enough type information to distinguish them from values of other type.
 The latter in turn necessitates that such values are allocated -- as is typically the case for external, host-implemented references as well
-(once Wasm has other forms of allocation, such as for structs in the [GC proposal](https://github.com/WebAssembly/gc), they can be used for this purpose, avoiding extra levels of exposing, see [below](#forward-compatibility-with-gc-proposal)).
+(once Wasm has other forms of allocation, such as for structs in the [GC proposal](https://github.com/WebAssembly/gc), they can be used for this purpose, avoiding extra levels of indirection, see [below](#forward-compatibility-with-gc-proposal)).
 
 The design does not enable the formation of cycles, so that simple reference counting techniques are applicable and no GC is required (though possible).
 
