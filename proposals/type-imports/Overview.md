@@ -51,8 +51,10 @@ There are several requirements for opaque type definitions (called "private" in 
 * In a similar vein, encapsulation must be forward-compatible with the addition of explicit casts. It ought to be possible to inject an encapsulated value into `anyref` and cast it back, in order for private types to participate in the same anyref-based type escape hatches as other references, and to avoid more complicated type system machinery. That is, it must be possible to compare with or cast _to_ a private type, but not _through_ it.
 
 Together, these requirements and goals necessitate that (1) private types are nominal, in order to distinguish them from one another, (2) values of private type share a representation with other reference types, in order to make private types suitable for imports, and (3) these values have a distinguished representation that maintains enough type information to distinguish them from values of other type.
-The latter in turn necessitates that such values are allocated -- as is typically the case for external, host-implemented references as well.
-However, the design presented here does not enable the formation of cycles, so that simple reference counting techniques are applicable and no GC is required (though possible).
+The latter in turn necessitates that such values are allocated -- as is typically the case for external, host-implemented references as well
+(once Wasm has other forms of allocation, such as for structs in the [GC proposal](https://github.com/WebAssembly/gc), they can be used for this purpose, avoiding extra levels of exposing, see [below](#forward-compatibility-with-gc-proposal)).
+
+The design does not enable the formation of cycles, so that simple reference counting techniques are applicable and no GC is required (though possible).
 
 
 ### Proposal Summary
@@ -242,15 +244,46 @@ TODO.
 ## Forward Compatibility with GC Proposal
 
 The notion of private type definition is similar to an immutable struct, as per the GC proposal.
-It would be possible to later define structs in the GC proposal as a generalisation of private types as follows:
+It would be possible to later define structs in the [GC proposal](https://github.com/WebAssembly/gc) as a generalisation of private types as follows:
 
 * Private types are reinterpreted as a special case of a struct definition, albeit a nominal one.
 
+  That is,
+  ```
+  (type $t (private i32 i64))
+  ```
+  gets desugared into
+  ```
+  (type $t (private struct (field i32) (field i64)))
+  ```
+
 * They are defined to be a subtype of the underlying (structural) struct type.
+
+  That is,
+  ```
+  (private struct ...) <: (struct ...)
+  ```
+  within the scope of its definition.
 
 * Then the `private.get` instruction becomes `struct.get`, which is still applicable to private values by way of subsumption.
 
-* It would furthermore be possible to orthogonalise `private` and `struct` and thereby allow other variations of private types, such as private arrays.
+  That is,
+  ```
+  (private.get $t i)
+  ```
+  gets desugared into
+  ```
+  (struct.get $t i)
+  ```
+
+* It would furthermore be possible to orthogonalise `private` and `struct` and thereby allow other variations of private types, such as private arrays or private functions.
+
+  That is,
+  ```
+  (type $a (private array i32))
+  (type $f (private func (param i32)))
+  ```
+  would be possible extensions.
 
 
 ## JS API
