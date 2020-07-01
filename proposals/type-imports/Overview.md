@@ -247,7 +247,6 @@ The notion of private type definition is similar to an immutable struct, as per 
 It would be possible to later define structs in the [GC proposal](https://github.com/WebAssembly/gc) as a generalisation of private types as follows:
 
 * Private types are reinterpreted as a special case of a struct definition, albeit a nominal one.
-
   That is,
   ```
   (type $t (private i32 i64))
@@ -258,7 +257,6 @@ It would be possible to later define structs in the [GC proposal](https://github
   ```
 
 * They are defined to be a subtype of the underlying (structural) struct type.
-
   That is,
   ```
   (private struct ...) <: (struct ...)
@@ -266,7 +264,6 @@ It would be possible to later define structs in the [GC proposal](https://github
   within the scope of its definition.
 
 * Then the `private.get` instruction becomes `struct.get`, which is still applicable to private values by way of subsumption.
-
   That is,
   ```
   (private.get $t i)
@@ -277,7 +274,6 @@ It would be possible to later define structs in the [GC proposal](https://github
   ```
 
 * It would furthermore be possible to orthogonalise `private` and `struct` and thereby allow other variations of private types, such as private arrays or private functions.
-
   That is,
   ```
   (type $a (private array i32))
