@@ -101,11 +101,13 @@
   (global (export "g-const-refnull") (ref null $t) (ref.null $t))
   (global (export "g-const-ref") (ref $t) (ref.func $f))
   (global (export "g-const-extern") externref (ref.null extern))
+  (global (export "g-const-any") anyref (ref.null any))
   (global (export "g-var-funcnull") (mut (ref null func)) (ref.null func))
   (global (export "g-var-func") (mut (ref func)) (ref.func $f))
   (global (export "g-var-refnull") (mut (ref null $t)) (ref.null $t))
   (global (export "g-var-ref") (mut (ref $t)) (ref.func $f))
   (global (export "g-var-extern") (mut externref) (ref.null extern))
+  (global (export "g-var-any") (mut anyref) (ref.null any))
 )
 (register "Mref_ex" $Mref_ex)
 
@@ -121,6 +123,8 @@
   (global (import "Mref_ex" "g-const-ref") (ref null $t))
   (global (import "Mref_ex" "g-const-ref") (ref $t))
   (global (import "Mref_ex" "g-const-extern") externref)
+  (global (import "Mref_ex" "g-const-extern") anyref)
+  (global (import "Mref_ex" "g-const-any") anyref)
 
   (global (import "Mref_ex" "g-var-funcnull") (mut (ref null func)))
   (global (import "Mref_ex" "g-var-func") (mut (ref func)))

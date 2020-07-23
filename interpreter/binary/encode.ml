@@ -102,6 +102,7 @@ let encode m =
       | ExternHeapType -> vs7 (-0x11)
       | DefHeapType (SynVar x) -> vs33 x
       | DefHeapType (SemVar _) -> assert false
+      | AnyHeapType -> vs7 (-0x12)
       | BotHeapType -> assert false
 
     let ref_type = function

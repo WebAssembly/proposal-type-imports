@@ -354,6 +354,7 @@ let assert_result at got expect =
         (match t, v with
         | Types.FuncHeapType, Ref (Instance.FuncRef _)
         | Types.ExternHeapType, Ref (ExternRef _) -> false
+        | Types.AnyHeapType, Ref _ -> false
         | _ -> true
         )
       | NullResult ->

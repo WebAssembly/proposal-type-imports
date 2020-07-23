@@ -23,10 +23,7 @@ function is_externref(x) {
 function is_funcref(x) {
   return typeof x === "function" ? 1 : 0;
 }
-function eq_externref(x, y) {
-  return x === y ? 1 : 0;
-}
-function eq_funcref(x, y) {
+function eq_ref(x, y) {
   return x === y ? 1 : 0;
 }
 
@@ -34,8 +31,7 @@ let spectest = {
   externref: externref,
   is_externref: is_externref,
   is_funcref: is_funcref,
-  eq_externref: eq_externref,
-  eq_funcref: eq_funcref,
+  eq_ref: eq_ref,
   print: console.log.bind(console),
   print_i32: console.log.bind(console),
   print_i32_f32: console.log.bind(console),
@@ -235,9 +231,8 @@ let subject_idx = 0l
 let externref_idx = 1l
 let is_externref_idx = 2l
 let is_funcref_idx = 3l
-let eq_externref_idx = 4l
-let _eq_funcref_idx = 5l
-let subject_type_idx = 6l
+let eq_ref_idx = 4l
+let subject_type_idx = 5l
 
 let eq_of = function
   | I32Type -> I32 I32Op.Eq
@@ -299,7 +294,7 @@ let assert_return ress ts at =
     | LitResult {it = Ref (ExternRef n); _} ->
       [ Const (I32 n @@ at) @@ at;
         Call (externref_idx @@ at) @@ at;
-        Call (eq_externref_idx @@ at)  @@ at;
+        Call (eq_ref_idx @@ at)  @@ at;
         Test (I32 I32Op.Eqz) @@ at;
         BrIf (0l @@ at) @@ at ]
     | LitResult {it = Ref _; _} ->
@@ -324,21 +319,24 @@ let assert_return ress ts at =
         Compare (eq_of t') @@ at;
         Test (I32 I32Op.Eqz) @@ at;
         BrIf (0l @@ at) @@ at ]
-    | RefResult t ->
-      let is_ref_idx =
-        match t with
-        | FuncHeapType -> is_funcref_idx
-        | ExternHeapType -> is_externref_idx
-        | DefHeapType _ -> is_funcref_idx
-        | BotHeapType -> assert false
-      in
-      [ Call (is_ref_idx @@ at) @@ at;
+    | RefResult FuncHeapType ->
+      [ Call (is_funcref_idx @@ at) @@ at;
         Test (I32 I32Op.Eqz) @@ at;
         BrIf (0l @@ at) @@ at ]
+    | RefResult ExternHeapType ->
+      [ Call (is_externref_idx @@ at) @@ at;
+        Test (I32 I32Op.Eqz) @@ at;
+        BrIf (0l @@ at) @@ at ]
+    | RefResult AnyHeapType ->
+      [ BrOnNull (0l @@ at) @@ at ]
+    | RefResult _ ->
+      assert false
     | NullResult ->
       (match t with
       | RefType _ ->
-        [ BrOnNull (0l @@ at) @@ at ]
+        [ RefIsNull @@ at;
+          Test (I32 I32Op.Eqz) @@ at;
+          BrIf (0l @@ at) @@ at ]
       | _ ->
         [ Br (0l @@ at) @@ at ]
       )

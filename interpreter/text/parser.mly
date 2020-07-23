@@ -180,7 +180,7 @@ let inline_func_type_explicit (c : context) x ft at =
 
 %token LPAR RPAR
 %token NAT INT FLOAT STRING VAR
-%token NUM_TYPE FUNCREF EXTERNREF REF EXTERN NULL MUT
+%token NUM_TYPE FUNCREF EXTERNREF ANYREF REF EXTERN ANY NULL MUT
 %token UNREACHABLE NOP DROP SELECT
 %token BLOCK END IF THEN ELSE LOOP LET
 %token BR BR_IF BR_TABLE BR_ON_NULL
@@ -191,7 +191,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token MEMORY_SIZE MEMORY_GROW MEMORY_FILL MEMORY_COPY MEMORY_INIT DATA_DROP
 %token LOAD STORE OFFSET_EQ_NAT ALIGN_EQ_NAT
 %token CONST UNARY BINARY TEST COMPARE CONVERT
-%token REF_NULL REF_FUNC REF_EXTERN REF_IS_NULL REF_AS_NON_NULL
+%token REF_NULL REF_FUNC REF_EXTERN REF_ANY REF_IS_NULL REF_AS_NON_NULL
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
 %token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT
 %token MODULE BIN QUOTE
@@ -250,11 +250,13 @@ null_opt :
 heap_type :
   | FUNC { fun c -> FuncHeapType }
   | EXTERN { fun c -> ExternHeapType }
+  | ANY { fun c -> AnyHeapType }
   | var { fun c -> DefHeapType (SynVar ($1 c type_).it) }
 
 ref_type :
   | LPAR REF null_opt heap_type RPAR { fun c -> ($3, $4 c) }
   | FUNCREF { fun c -> (Nullable, FuncHeapType) }  /* Sugar */
+  | ANYREF { fun c -> (Nullable, AnyHeapType) }  /* Sugar */
   | EXTERNREF { fun c -> (Nullable, ExternHeapType) }  /* Sugar */
 
 value_type :
@@ -1160,6 +1162,7 @@ result :
   | LPAR CONST NAN RPAR { NanResult (nanop $2 ($3 @@ ati 3)) @@ at () }
   | LPAR REF_FUNC RPAR { RefResult FuncHeapType @@ at () }
   | LPAR REF_EXTERN RPAR { RefResult ExternHeapType @@ at () }
+  | LPAR REF_ANY RPAR { RefResult AnyHeapType @@ at () }
   | LPAR REF_NULL RPAR { NullResult @@ at () }
 
 result_list :

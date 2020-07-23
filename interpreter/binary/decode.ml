@@ -147,6 +147,7 @@ let heap_type s =
   match vs33 s with
   | -0x10l -> FuncHeapType
   | -0x11l -> ExternHeapType
+  | -0x12l -> AnyHeapType
   | i when i >= 0l -> DefHeapType (SynVar i)
   | _ -> error s pos "malformed heap type"
 
@@ -155,6 +156,7 @@ let ref_type s =
   match vs33 s with
   | -0x10l -> (Nullable, FuncHeapType)
   | -0x11l -> (Nullable, ExternHeapType)
+  | -0x12l -> (Nullable, AnyHeapType)
   | -0x14l -> (Nullable, heap_type s)
   | -0x15l -> (NonNullable, heap_type s)
   | _ -> error s pos "malformed reference type"

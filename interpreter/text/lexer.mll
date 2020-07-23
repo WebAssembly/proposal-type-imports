@@ -165,6 +165,8 @@ rule token = parse
   | "extern" { EXTERN }
   | "externref" { EXTERNREF }
   | "funcref" { FUNCREF }
+  | "any" { ANY }
+  | "anyref" { ANYREF }
   | (nxx as t) { NUM_TYPE (num_type t) }
   | "mut" { MUT }
 
@@ -183,6 +185,7 @@ rule token = parse
   | "ref.null" { REF_NULL }
   | "ref.func" { REF_FUNC }
   | "ref.extern" { REF_EXTERN }
+  | "ref.any" { REF_ANY }
   | "ref.is_null" { REF_IS_NULL }
   | "ref.as_non_null" { REF_AS_NON_NULL }
 

@@ -106,6 +106,7 @@ and match_heap_type c a t1 t2 =
     | FuncDefType _ -> true
     )
   | DefHeapType x1, DefHeapType x2 -> match_var_type c a x1 x2
+  | _, AnyHeapType -> true
   | BotHeapType, _ -> true
   | _, _ -> eq_heap_type c [] t1 t2
 
