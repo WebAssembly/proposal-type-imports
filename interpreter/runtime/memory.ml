@@ -1,14 +1,12 @@
+open Types
+open Value
 open Bigarray
 open Lib.Bigarray
-open Types
-open Values
 
 type size = int32  (* number of pages *)
 type address = int64
 type offset = int32
-
-type pack_size = Pack8 | Pack16 | Pack32
-type extension = SX | ZX
+type count = int32
 
 type memory' = (int, int8_unsigned_elt, c_layout) Array1.t
 type memory = {mutable ty : memory_type; mutable content : memory'}
@@ -21,11 +19,6 @@ exception SizeLimit
 exception OutOfMemory
 
 let page_size = 0x10000L (* 64 KiB *)
-
-let packed_size = function
-  | Pack8 -> 1
-  | Pack16 -> 2
-  | Pack32 -> 4
 
 let valid_limits {min; max} =
   match max with
@@ -124,7 +117,7 @@ let store_num mem a o n =
     | I64 x -> x
     | F32 x -> Int64.of_int32 (F32.to_bits x)
     | F64 x -> F64.to_bits x
-  in storen mem a o (Types.size (Values.type_of_num n)) x
+  in storen mem a o (Types.size (Value.type_of_num n)) x
 
 let extend x n = function
   | ZX -> x
@@ -140,7 +133,7 @@ let load_packed sz ext mem a o t =
   | _ -> raise Type
 
 let store_packed sz mem a o n =
-  assert (packed_size sz <= Types.size (Values.type_of_num n));
+  assert (packed_size sz <= Types.size (Value.type_of_num n));
   let w = packed_size sz in
   let x =
     match n with

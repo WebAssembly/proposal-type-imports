@@ -1,5 +1,5 @@
 open Types
-open Values
+open Value
 
 type memory
 type t = memory
@@ -7,9 +7,7 @@ type t = memory
 type size = int32  (* number of pages *)
 type address = int64
 type offset = int32
-
-type pack_size = Pack8 | Pack16 | Pack32
-type extension = SX | ZX
+type count = int32
 
 exception Type
 exception Bounds
@@ -18,7 +16,6 @@ exception SizeLimit
 exception OutOfMemory
 
 val page_size : int64
-val packed_size : pack_size -> int
 
 val alloc : memory_type -> memory (* raises Type, SizeOverflow, OutOfMemory *)
 val type_of : memory -> memory_type

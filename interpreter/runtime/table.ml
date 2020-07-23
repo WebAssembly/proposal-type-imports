@@ -1,8 +1,9 @@
 open Types
-open Values
+open Value
 
 type size = int32
 type index = int32
+type count = int32
 
 type table = {mutable ty : table_type; mutable content : ref_ array}
 type t = table
@@ -50,7 +51,7 @@ let load tab i =
 
 let store tab i r =
   let TableType (lim, t) = tab.ty in
-  if not (match_ref_type (type_of_ref r) t) then raise Type;
+  if not (Match.match_ref_type [] [] (type_of_ref r) t) then raise Type;
   try Lib.Array32.set tab.content i r with Invalid_argument _ -> raise Bounds
 
 let blit tab offset rs =

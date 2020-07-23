@@ -160,7 +160,10 @@ rule token = parse
   | '"'character*'\\'_
     { error_nest (Lexing.lexeme_end_p lexbuf) lexbuf "illegal escape" }
 
-  | "anyref" { ANYREF }
+  | "ref" { REF }
+  | "null" { NULL }
+  | "extern" { EXTERN }
+  | "externref" { EXTERNREF }
   | "funcref" { FUNCREF }
   | (nxx as t) { NUM_TYPE (num_type t) }
   | "mut" { MUT }
@@ -169,35 +172,41 @@ rule token = parse
     { let open Source in
       CONST (numop t
         (fun s -> let n = I32.of_string s.it in
-          i32_const (n @@ s.at), Values.I32 n)
+          i32_const (n @@ s.at), Value.I32 n)
         (fun s -> let n = I64.of_string s.it in
-          i64_const (n @@ s.at), Values.I64 n)
+          i64_const (n @@ s.at), Value.I64 n)
         (fun s -> let n = F32.of_string s.it in
-          f32_const (n @@ s.at), Values.F32 n)
+          f32_const (n @@ s.at), Value.F32 n)
         (fun s -> let n = F64.of_string s.it in
-          f64_const (n @@ s.at), Values.F64 n))
+          f64_const (n @@ s.at), Value.F64 n))
     }
   | "ref.null" { REF_NULL }
   | "ref.func" { REF_FUNC }
-  | "ref.host" { REF_HOST }
+  | "ref.extern" { REF_EXTERN }
   | "ref.is_null" { REF_IS_NULL }
+  | "ref.as_non_null" { REF_AS_NON_NULL }
 
   | "nop" { NOP }
   | "unreachable" { UNREACHABLE }
   | "drop" { DROP }
   | "block" { BLOCK }
   | "loop" { LOOP }
+  | "let" { LET }
   | "end" { END }
   | "br" { BR }
   | "br_if" { BR_IF }
   | "br_table" { BR_TABLE }
+  | "br_on_null" { BR_ON_NULL }
   | "return" { RETURN }
   | "if" { IF }
   | "then" { THEN }
   | "else" { ELSE }
   | "select" { SELECT }
   | "call" { CALL }
+  | "call_ref" { CALL_REF }
   | "call_indirect" { CALL_INDIRECT }
+  | "return_call_ref" { RETURN_CALL_REF }
+  | "func.bind" { FUNC_BIND }
 
   | "local.get" { LOCAL_GET }
   | "local.set" { LOCAL_SET }
@@ -210,6 +219,16 @@ rule token = parse
   | "table.size" { TABLE_SIZE }
   | "table.grow" { TABLE_GROW }
   | "table.fill" { TABLE_FILL }
+  | "table.copy" { TABLE_COPY }
+  | "table.init" { TABLE_INIT }
+  | "elem.drop" { ELEM_DROP }
+
+  | "memory.size" { MEMORY_SIZE }
+  | "memory.grow" { MEMORY_GROW }
+  | "memory.fill" { MEMORY_FILL }
+  | "memory.copy" { MEMORY_COPY }
+  | "memory.init" { MEMORY_INIT }
+  | "data.drop" { DATA_DROP }
 
   | (nxx as t)".load"
     { LOAD (fun a o ->
@@ -250,6 +269,9 @@ rule token = parse
   | (ixx as t)".clz" { UNARY (intop t i32_clz i64_clz) }
   | (ixx as t)".ctz" { UNARY (intop t i32_ctz i64_ctz) }
   | (ixx as t)".popcnt" { UNARY (intop t i32_popcnt i64_popcnt) }
+  | (ixx as t)".extend8_s" { UNARY (intop t i32_extend8_s i64_extend8_s) }
+  | (ixx as t)".extend16_s" { UNARY (intop t i32_extend16_s i64_extend16_s) }
+  | "i64.extend32_s" { UNARY i64_extend32_s }
   | (fxx as t)".neg" { UNARY (floatop t f32_neg f64_neg) }
   | (fxx as t)".abs" { UNARY (floatop t f32_abs f64_abs) }
   | (fxx as t)".sqrt" { UNARY (floatop t f32_sqrt f64_sqrt) }
@@ -313,6 +335,14 @@ rule token = parse
     { CONVERT (intop t i32_trunc_f64_s i64_trunc_f64_s) }
   | (ixx as t)".trunc_f64_u"
     { CONVERT (intop t i32_trunc_f64_u i64_trunc_f64_u) }
+  | (ixx as t)".trunc_sat_f32_s"
+    { CONVERT (intop t i32_trunc_sat_f32_s i64_trunc_sat_f32_s) }
+  | (ixx as t)".trunc_sat_f32_u"
+    { CONVERT (intop t i32_trunc_sat_f32_u i64_trunc_sat_f32_u) }
+  | (ixx as t)".trunc_sat_f64_s"
+    { CONVERT (intop t i32_trunc_sat_f64_s i64_trunc_sat_f64_s) }
+  | (ixx as t)".trunc_sat_f64_u"
+    { CONVERT (intop t i32_trunc_sat_f64_u i64_trunc_sat_f64_u) }
   | (fxx as t)".convert_i32_s"
     { CONVERT (floatop t f32_convert_i32_s f64_convert_i32_s) }
   | (fxx as t)".convert_i32_u"
@@ -326,9 +356,6 @@ rule token = parse
   | "i32.reinterpret_f32" { CONVERT i32_reinterpret_f32 }
   | "i64.reinterpret_f64" { CONVERT i64_reinterpret_f64 }
 
-  | "memory.size" { MEMORY_SIZE }
-  | "memory.grow" { MEMORY_GROW }
-
   | "type" { TYPE }
   | "func" { FUNC }
   | "start" { START }
@@ -340,7 +367,9 @@ rule token = parse
   | "memory" { MEMORY }
   | "elem" { ELEM }
   | "data" { DATA }
+  | "declare" { DECLARE }
   | "offset" { OFFSET }
+  | "item" { ITEM }
   | "import" { IMPORT }
   | "export" { EXPORT }
 
@@ -356,12 +385,10 @@ rule token = parse
   | "assert_invalid" { ASSERT_INVALID }
   | "assert_unlinkable" { ASSERT_UNLINKABLE }
   | "assert_return" { ASSERT_RETURN }
-  | "assert_return_canonical_nan" { ASSERT_RETURN_CANONICAL_NAN }
-  | "assert_return_arithmetic_nan" { ASSERT_RETURN_ARITHMETIC_NAN }
-  | "assert_return_ref" { ASSERT_RETURN_REF }
-  | "assert_return_func" { ASSERT_RETURN_FUNC }
   | "assert_trap" { ASSERT_TRAP }
   | "assert_exhaustion" { ASSERT_EXHAUSTION }
+  | "nan:canonical" { NAN Script.CanonicalNan }
+  | "nan:arithmetic" { NAN Script.ArithmeticNan }
   | "input" { INPUT }
   | "output" { OUTPUT }
 

@@ -164,8 +164,8 @@ The implementation consumes a WebAssembly AST given in S-expression syntax. Here
 
 Note: The grammar is shown here for convenience, the definite source is the [specification of the text format](https://webassembly.github.io/spec/core/text/).
 ```
-num:    <digit> (_? <digit>)*
-hexnum: <hexdigit> (_? <hexdigit>)*
+num:    <digit>(_? <digit>)*
+hexnum: <hexdigit>(_? <hexdigit>)*
 nat:    <num> | 0x<hexnum>
 int:    <nat> | +<nat> | -<nat>
 float:  <num>.<num>?(e|E <num>)? | 0x<hexnum>.<hexnum>?(p|P <num>)?
@@ -178,13 +178,19 @@ var: <nat> | <name>
 unop:  ctz | clz | popcnt | ...
 binop: add | sub | mul | ...
 relop: eq | ne | lt | ...
-sign:  s|u
+sign:  s | u
 offset: offset=<nat>
 align: align=(1|2|4|8|...)
 cvtop: trunc | extend | wrap | ...
 
 num_type: i32 | i64 | f32 | f64
-ref_type: anyref | funcref
+heap_type: func | extern | (type <var>)
+ref_type:
+  ( ref null? <heap_type> )
+  ( ref null? <var> )         ;; = (ref null (type <var>))
+  funcref                     ;; = (ref null func)
+  externref                   ;; = (ref null extern)
+
 val_type: num_type | ref_type
 block_type : ( result <val_type>* )*
 func_type:   ( type <var> )? <param>* <result>*
@@ -199,6 +205,7 @@ expr:
   ( loop <name>? <block_type> <instr>* )
   ( if <name>? <block_type> ( then <instr>* ) ( else <instr>* )? )
   ( if <name>? <block_type> <expr>+ ( then <instr>* ) ( else <instr>* )? ) ;; = <expr>+ (if <name>? <block_type> (then <instr>*) (else <instr>*)?)
+  ( let <name>? <block_type> <local>* <instr>* )
 
 instr:
   <expr>
@@ -207,64 +214,85 @@ instr:
   loop <name>? <block_type> <instr>* end <name>?                     ;; = (loop <name>? <block_type> <instr>*)
   if <name>? <block_type> <instr>* end <name>?                       ;; = (if <name>? <block_type> (then <instr>*))
   if <name>? <block_type> <instr>* else <name>? <instr>* end <name>? ;; = (if <name>? <block_type> (then <instr>*) (else <instr>*))
+  let <name>? <block_type> <local>* <instr>* end <name>?             ;; = (let <name>? <block_type> <local>* <instr>*)
 
 op:
   unreachable
   nop
+  drop
+  select
   br <var>
   br_if <var>
   br_table <var>+
+  br_on_null <var> <heap_type>
   return
   call <var>
-  call_indirect <var> <func_type>
-  drop
-  select
+  call_indirect <var>? <func_type>
+  call_ref
+  return_call_ref
+  func.bind <func_type>
   local.get <var>
   local.set <var>
   local.tee <var>
   global.get <var>
   global.set <var>
-  table.get <var>
-  table.set <var>
-  table.size <var>
-  table.grow <var>
-  table.fill <var>
-  <val_type>.load((8|16|32)_<sign>)? <offset>? <align>?
-  <val_type>.store(8|16|32)? <offset>? <align>?
+  table.get <var>?
+  table.set <var>?
+  table.size <var>?
+  table.grow <var>?
+  table.fill <var>?
+  table.copy <var>? <var>?
+  table.init <var>? <var>
+  elem.drop <var>
+  <num_type>.load((8|16|32)_<sign>)? <offset>? <align>?
+  <num_type>.store(8|16|32)? <offset>? <align>?
   memory.size
   memory.grow
-  ref.null
-  ref.isnull
+  memory.fill
+  memory.copy
+  memory.init <var>
+  data.drop <var>
+  ref.null <heap_type>
+  ref.is_null <heap_type>
+  ref_as_non_null <heap_type>
   ref.func <var>
-  <val_type>.const <value>
-  <val_type>.<unop>
-  <val_type>.<binop>
-  <val_type>.<testop>
-  <val_type>.<relop>
-  <val_type>.<cvtop>_<val_type>(_<sign>)?
+  <num_type>.const <value>
+  <num_type>.<unop>
+  <num_type>.<binop>
+  <num_type>.<testop>
+  <num_type>.<relop>
+  <num_type>.<cvtop>_<num_type>(_<sign>)?
 
 func:    ( func <name>? <func_type> <local>* <instr>* )
          ( func <name>? ( export <string> ) <...> )                         ;; = (export <string> (func <N>)) (func <name>? <...>)
-         ( func <name>? ( import <string> <string> ) <func_type>)           ;; = (import <name>? <string> <string> (func <func_type>))
+         ( func <name>? ( import <string> <string> ) <func_type>)           ;; = (import <string> <string> (func <name>? <func_type>))
 param:   ( param <val_type>* ) | ( param <name> <val_type> )
 result:  ( result <val_type>* )
 local:   ( local <val_type>* ) | ( local <name> <val_type> )
 
 global:  ( global <name>? <global_type> <instr>* )
          ( global <name>? ( export <string> ) <...> )                       ;; = (export <string> (global <N>)) (global <name>? <...>)
-         ( global <name>? ( import <string> <string> ) <global_type> )      ;; = (import <name>? <string> <string> (global <global_type>))
+         ( global <name>? ( import <string> <string> ) <global_type> )      ;; = (import <string> <string> (global <name>? <global_type>))
 table:   ( table <name>? <table_type> )
          ( table <name>? ( export <string> ) <...> )                        ;; = (export <string> (table <N>)) (table <name>? <...>)
-         ( table <name>? ( import <string> <string> ) <table_type> )        ;; = (import <name>? <string> <string> (table <table_type>))
-         ( table <name>? ( export <string> )* <ref_type> ( elem <var>* ) ) ;; = (table <name>? ( export <string> )* <size> <size> <ref_type>) (elem (i32.const 0) <var>*)
+         ( table <name>? ( import <string> <string> ) <table_type> )        ;; = (import <string> <string> (table <name>? <table_type>))
+         ( table <name>? ( export <string> )* <ref_type> ( elem <var>* ) )  ;; = (table <name>? ( export <string> )* <size> <size> <ref_type>) (elem (i32.const 0) <var>*)
 elem:    ( elem <var>? (offset <instr>* ) <var>* )
          ( elem <var>? <expr> <var>* )                                      ;; = (elem <var>? (offset <expr>) <var>*)
+         ( elem <var>? declare <ref_type> <var>* )
+elem:    ( elem <name>? ( table <var> )? <offset> <ref_type> <item>* )
+         ( elem <name>? ( table <var> )? <offset> func <var>* )             ;; = (elem <name>? ( table <var> )? <offset> funcref (ref.func <var>)*)
+         ( elem <var>? declare? <ref_type> <var>* )
+         ( elem <name>? declare? func <var>* )                               ;; = (elem <name>? declare? funcref (ref.func <var>)*)
+offset:  ( offset <instr>* )
+         <expr>                                                             ;; = ( offset <expr> )
+item:    ( item <instr>* )
+         <expr>                                                             ;; = ( item <expr> )
 memory:  ( memory <name>? <memory_type> )
          ( memory <name>? ( export <string> ) <...> )                       ;; = (export <string> (memory <N>))+ (memory <name>? <...>)
-         ( memory <name>? ( import <string> <string> ) <memory_type> )      ;; = (import <name>? <string> <string> (memory <memory_type>))
+         ( memory <name>? ( import <string> <string> ) <memory_type> )      ;; = (import <string> <string> (memory <name>? <memory_type>))
          ( memory <name>? ( export <string> )* ( data <string>* ) )         ;; = (memory <name>? ( export <string> )* <size> <size>) (data (i32.const 0) <string>*)
-data:    ( data <var>? ( offset <instr>* ) <string>* )
-         ( data <var>? <expr> <string>* )                                   ;; = (data <var>? (offset <expr>) <string>*)
+data:    ( data <name>? ( memory <var> )? <offset> <string>* )
 
 start:   ( start <var> )
 
@@ -318,7 +346,6 @@ script: <cmd>*
 cmd:
   <module>                                   ;; define, validate, and initialize module
   ( register <string> <name>? )              ;; register module for imports
-module with given failure string
   <action>                                   ;; perform action and print results
   <assertion>                                ;; assert result of an action
   <meta>                                     ;; meta command
@@ -334,18 +361,28 @@ action:
 
 const:
   ( <num_type>.const <num> )                 ;; number value
-  ( ref.null )                               ;; null reference
+  ( ref.null <ref_kind> )                    ;; null reference
   ( ref.host <nat> )                         ;; host reference
 
 assertion:
-  ( assert_return <action> <const>* )        ;; assert action has expected results
-  ( assert_return_canonical_nan <action> )   ;; assert action results in NaN in a canonical form
-  ( assert_return_arithmetic_nan <action> )  ;; assert action results in NaN with 1 in MSB of fraction field
+  ( assert_return <action> <result_pat>* )   ;; assert action has expected results
   ( assert_trap <action> <failure> )         ;; assert action traps with given failure string
+  ( assert_exhaustion <action> <failure> )   ;; assert action exhausts system resources
   ( assert_malformed <module> <failure> )    ;; assert module cannot be decoded with given failure string
   ( assert_invalid <module> <failure> )      ;; assert module is invalid with given failure string
   ( assert_unlinkable <module> <failure> )   ;; assert module fails to link
   ( assert_trap <module> <failure> )         ;; assert module traps on instantiation
+
+result_pat:
+  ( <num_type>.const <num_pat> )
+  ( ref.extern )
+  ( ref.func )
+  ( ref.null )
+
+num_pat:
+  <value>                                    ;; literal result
+  nan:canonical                              ;; NaN in canonical form
+  nan:arithmetic                             ;; NaN with 1 in MSB of payload
 
 meta:
   ( script <name>? <script> )                ;; name a subscript
@@ -363,10 +400,63 @@ A module of the form `(module quote <string>*)` is given in textual form and wil
 There are also a number of meta commands.
 The `script` command is a simple mechanism to name sub-scripts themselves. This is mainly useful for converting scripts with the `output` command. Commands inside a `script` will be executed normally, but nested meta are expanded in place (`input`, recursively) or elided (`output`) in the named script.
 
-The `input` and `output` meta commands determine the requested file format from the file name extension. They can handle both `.wasm`, `.wat`, and `.wast` files. In the case of input, a `.wast` script will be recursively executed. Output additionally handles `.js` as a target, which will convert the referenced script to an equivalent, self-contained JavaScript runner. It also recognises `.bin.wast` specially, which creates a script where module definitions are in binary.
+The `input` and `output` meta commands determine the requested file format from the file name extension. They can handle both `.wasm`, `.wat`, and `.wast` files. In the case of input, a `.wast` script will be recursively executed. Output additionally handles `.js` as a target, which will convert the referenced script to an equivalent, self-contained JavaScript runner. It also recognises `.bin.wast` specially, which creates a _binary script_ where module definitions are in binary, as defined below.
 
 The interpreter supports a "dry" mode (flag `-d`), in which modules are only validated. In this mode, all actions and assertions are ignored.
 It also supports an "unchecked" mode (flag `-u`), in which module definitions are not validated before use.
+
+### Binary Scripts
+
+The grammar of binary scripts is a subset of the grammar for general scripts:
+```
+binscript: <cmd>*
+
+cmd:
+  <module>                                   ;; define, validate, and initialize module
+  ( register <string> <name>? )              ;; register module for imports
+  <action>                                   ;; perform action and print results
+  <assertion>                                ;; assert result of an action
+
+module:
+  ( module <name>? binary <string>* )        ;; module in binary format (may be malformed)
+
+action:
+  ( invoke <name>? <string> <expr>* )        ;; invoke function export
+  ( get <name>? <string> )                   ;; get global export
+
+assertion:
+  ( assert_return <action> <result_pat>* )   ;; assert action has expected results
+  ( assert_trap <action> <failure> )         ;; assert action traps with given failure string
+  ( assert_exhaustion <action> <failure> )   ;; assert action exhausts system resources
+  ( assert_malformed <module> <failure> )    ;; assert module cannot be decoded with given failure string
+  ( assert_invalid <module> <failure> )      ;; assert module is invalid with given failure string
+  ( assert_unlinkable <module> <failure> )   ;; assert module fails to link
+  ( assert_trap <module> <failure> )         ;; assert module traps on instantiation
+
+result_pat:
+  ( <num_type>.const <num_pat> )
+  ( ref.extern )
+  ( ref.func )
+  ( ref.null )
+
+num_pat:
+  <value>                                    ;; literal result
+  nan:canonical                              ;; NaN in canonical form
+  nan:arithmetic                             ;; NaN with 1 in MSB of payload
+
+value:  <int> | <float>
+int:    0x<hexnum>
+float:  0x<hexnum>.<hexnum>?(p|P <num>)?
+hexnum: <hexdigit>(_? <hexdigit>)*
+
+name:   $(<letter> | <digit> | _ | . | + | - | * | / | \ | ^ | ~ | = | < | > | ! | ? | @ | # | $ | % | & | | | : | ' | `)+
+string: "(<char> | \n | \t | \\ | \' | \" | \<hex><hex> | \u{<hex>+})*"
+```
+This grammar removes meta commands, textual and quoted modules.
+All numbers are in hex notation.
+
+Moreover, float values are required to be precise, that is, they may not contain bits that would lead to rounding.
+
 
 ## Abstract Syntax
 

@@ -15,6 +15,7 @@ Construct                                        Judgement
 ===============================================  ===============================================================================
 :ref:`Limits <valid-limits>`                     :math:`\vdashlimits \limits : k`
 :ref:`Function type <valid-functype>`            :math:`\vdashfunctype \functype \ok`
+:ref:`Block type <valid-blocktype>`              :math:`\vdashblocktype \blocktype \ok`
 :ref:`Table type <valid-tabletype>`              :math:`\vdashtabletype \tabletype \ok`
 :ref:`Memory type <valid-memtype>`               :math:`\vdashmemtype \memtype \ok`
 :ref:`Global type <valid-globaltype>`            :math:`\vdashglobaltype \globaltype \ok`
@@ -26,8 +27,10 @@ Construct                                        Judgement
 :ref:`Table <valid-table>`                       :math:`C \vdashtable \table : \tabletype`
 :ref:`Memory <valid-mem>`                        :math:`C \vdashmem \mem : \memtype`
 :ref:`Global <valid-global>`                     :math:`C \vdashglobal \global : \globaltype`
-:ref:`Element segment <valid-elem>`              :math:`C \vdashelem \elem \ok`
+:ref:`Element segment <valid-elem>`              :math:`C \vdashelem \elem : \reftype`
+:ref:`Element mode <valid-elemmode>`             :math:`C \vdashelemmode \elemmode : \reftype`
 :ref:`Data segment <valid-data>`                 :math:`C \vdashdata \data \ok`
+:ref:`Data mode <valid-datamode>`                :math:`C \vdashdatamode \datamode \ok`
 :ref:`Start function <valid-start>`              :math:`C \vdashstart \start \ok`
 :ref:`Export <valid-export>`                     :math:`C \vdashexport \export : \externtype`
 :ref:`Export description <valid-exportdesc>`     :math:`C \vdashexportdesc \exportdesc : \externtype`
@@ -52,6 +55,8 @@ Construct                                        Judgement
 :ref:`Table instance <valid-tableinst>`          :math:`S \vdashtableinst \tableinst : \tabletype`
 :ref:`Memory instance <valid-meminst>`           :math:`S \vdashmeminst \meminst : \memtype`
 :ref:`Global instance <valid-globalinst>`        :math:`S \vdashglobalinst \globalinst : \globaltype`
+:ref:`Element instance <valid-eleminst>`         :math:`S \vdasheleminst \eleminst \ok`
+:ref:`Data instance <valid-datainst>`            :math:`S \vdashdatainst \datainst \ok`
 :ref:`Export instance <valid-exportinst>`        :math:`S \vdashexportinst \exportinst \ok`
 :ref:`Module instance <valid-moduleinst>`        :math:`S \vdashmoduleinst \moduleinst : C`
 :ref:`Store <valid-store>`                       :math:`\vdashstore \store \ok`
@@ -78,10 +83,6 @@ Matching
 ===============================================  ===============================================================================
 Construct                                        Judgement
 ===============================================  ===============================================================================
-:ref:`Number type <match-numtype>`               :math:`\vdashnumtypematch \numtype_1 \matchesvaltype \numtype_2`
-:ref:`Reference type <match-reftype>`            :math:`\vdashreftypematch \reftype_1 \matchesvaltype \reftype_2`
-:ref:`Value type <match-valtype>`                :math:`\vdashvaltypematch \valtype_1 \matchesvaltype \valtype_2`
-:ref:`Result type <match-resulttype>`            :math:`\vdashresulttypematch [t_1^?] \matchesresulttype [t_2^?]`
 :ref:`External type <match-externtype>`          :math:`\vdashexterntypematch \externtype_1 \matchesexterntype \externtype_2`
 :ref:`Limits <match-limits>`                     :math:`\vdashlimitsmatch \limits_1 \matcheslimits \limits_2`
 ===============================================  ===============================================================================
@@ -97,6 +98,8 @@ Construct                                        Judgement
 :ref:`Table instance <extend-tableinst>`         :math:`\vdashtableinstextends \tableinst_1 \extendsto \tableinst_2`
 :ref:`Memory instance <extend-meminst>`          :math:`\vdashmeminstextends \meminst_1 \extendsto \meminst_2`
 :ref:`Global instance <extend-globalinst>`       :math:`\vdashglobalinstextends \globalinst_1 \extendsto \globalinst_2`
+:ref:`Element instance <extend-eleminst>`         :math:`\vdasheleminstextends \eleminst_1 \extendsto \eleminst_2`
+:ref:`Data instance <extend-datainst>`           :math:`\vdashdatainstextends \datainst_1 \extendsto \datainst_2`
 :ref:`Store <extend-store>`                      :math:`\vdashstoreextends \store_1 \extendsto \store_2`
 ===============================================  ===============================================================================
 

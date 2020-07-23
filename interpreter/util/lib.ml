@@ -1,10 +1,14 @@
+type void
+
 module Fun =
 struct
+  let id x = x
+  let flip f x y = f y x
   let curry f x y = f (x, y)
   let uncurry f (x, y) = f x y
 
   let rec repeat n f x =
-    if n = 0 then () else (f x; repeat (n - 1) f x)
+    if n = 0 then x else repeat (n - 1) f (f x)
 end
 
 module Int =
@@ -44,6 +48,14 @@ struct
       let len = min n (String.length s - i) in
       if len = 0 then [] else String.sub s i len :: loop (i + len)
     in loop 0
+
+  let rec find_from_opt f s i =
+    if i = String.length s then
+      None
+    else if f s.[i] then
+      Some i
+    else
+      find_from_opt f s (i + 1)
 end
 
 module List =
@@ -67,6 +79,13 @@ struct
     | 0, _ -> xs
     | n, _::xs' when n > 0 -> drop (n - 1) xs'
     | _ -> failwith "drop"
+
+  let rec split n xs = split' n [] xs
+  and split' n xs ys =
+    match n, ys with
+    | 0, _ -> List.rev xs, ys
+    | n, y::ys' when n > 0 -> split' (n - 1) (y::xs) ys'
+    | _ -> failwith "split"
 
   let rec last = function
     | x::[] -> x
@@ -93,6 +112,10 @@ struct
       match f x with
       | None -> map_filter f xs
       | Some y -> y :: map_filter f xs
+
+  let rec concat_map f = function
+    | [] -> []
+    | x::xs -> f x @ concat_map f xs
 end
 
 module List32 =
@@ -125,6 +148,11 @@ struct
     | 0l, _ -> xs
     | n, _::xs' when n > 0l -> drop (Int32.sub n 1l) xs'
     | _ -> failwith "drop"
+
+  let rec mapi f xs = mapi' f 0l xs
+  and mapi' f i = function
+    | [] -> []
+    | x::xs -> f i x :: mapi' f (Int32.add i 1l) xs
 end
 
 module Array32 =
@@ -188,4 +216,16 @@ struct
   let app f = function
     | Some x -> f x
     | None -> ()
+end
+
+module Promise =
+struct
+  type 'a t = 'a option ref
+
+  exception Promise
+
+  let make () = ref None
+  let fulfill p x = if !p = None then p := Some x else raise Promise
+  let value_opt p = !p
+  let value p = match !p with Some x -> x | None -> raise Promise
 end

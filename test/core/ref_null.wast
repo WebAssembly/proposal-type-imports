@@ -1,10 +1,14 @@
 (module
-  (func (export "anyref") (result anyref) (ref.null))
-  (func (export "funcref") (result funcref) (ref.null))
+  (type $t (func))
+  (func (export "externref") (result externref) (ref.null extern))
+  (func (export "funcref") (result funcref) (ref.null func))
+  (func (export "ref") (result (ref null $t)) (ref.null (type $t)))
 
-  (global anyref (ref.null))
-  (global funcref (ref.null))
+  (global externref (ref.null extern))
+  (global funcref (ref.null func))
+  (global (ref null $t) (ref.null (type $t)))
 )
 
-(assert_return (invoke "anyref") (ref.null))
-(assert_return (invoke "funcref") (ref.null))
+(assert_return (invoke "externref") (ref.null extern))
+(assert_return (invoke "funcref") (ref.null func))
+(assert_return (invoke "ref") (ref.null))

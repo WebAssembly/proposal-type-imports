@@ -21,22 +21,52 @@ The algorithm is expressed in typed pseudo code whose semantics is intended to b
 Data Structures
 ~~~~~~~~~~~~~~~
 
-Types are representable as an enumeration.
-A simple subtyping check can be defined on these types.
+Types are representable as a set of enumerations.
 
 .. code-block:: pseudo
 
-   type val_type = I32 | I64 | F32 | F64 | Anyref | Funcref | Nullref | Bot
+   type num_type = I32 | I64 | F32 | F64
+   type heap_type = Def(idx : nat) | Func | Extern | Bot
+   type ref_type = Ref(heap : heap_type, null : bool)
+   type val_type = num_type | ref_type | Bot
 
    func is_num(t : val_type) : bool =
      return t = I32 || t = I64 || t = F32 || t = F64 || t = Bot
 
    func is_ref(t : val_type) : bool =
-     return t = Anyref || t = Funcref || t = Nullref || t = Bot
+     return t = not (is_num t) || t = Bot
+
+Equivalence and subtyping checks can be defined on these types.
+
+.. code-block:: pseudo
+
+   func eq_def(n1, n2) =
+     ...  // check that both type definitions are equivalent (TODO)
+
+   func matches_null(null1 : bool, null2 : bool) : bool =
+     return null1 = null2 || null2
+
+   func matches_heap(t1 : heap_type, t2 : heap_type) : bool =
+     switch (t1, t2)
+       case (Def(n1), Def(n2))
+         return eq_def(n1, n2)
+       case (Def(_), Func)
+         return true
+       case (Bot, _)
+         return true
+       case (_, _)
+         return t1 = t2
+
+   func matches_ref(t1 : ref_type, t2 : ref_type) : bool =
+     return matches_heap(t1.heap, t2.heap) && matches_null(t1.null, t2.null)
 
    func matches(t1 : val_type, t2 : val_type) : bool =
-     return t1 = t2 || t1 = Bot ||
-       (t1 = Nullref && is_ref(t2)) || (is_ref(t1) && t2 = Anyref)
+     return
+       (is_num t1 && is_num t2 & t1 = t2) ||
+       (is_ref t1 && is_ref t2 & matches_ref(t1, t2)) ||
+       t1 = Bot
+
+.. todo:: Update text
 
 The algorithm uses two separate stacks: the *value stack* and the *control stack*.
 The former tracks the :ref:`types <syntax-valtype>` of operand values on the :ref:`stack <stack>`,
@@ -48,7 +78,8 @@ the latter surrounding :ref:`structured control instructions <syntax-instr-contr
 
    type ctrl_stack = stack(ctrl_frame)
    type ctrl_frame = {
-     label_types : list(val_type)
+     opcode : opcode
+     start_types : list(val_type)
      end_types : list(val_type)
      height : nat
      unreachable : bool
@@ -56,11 +87,7 @@ the latter surrounding :ref:`structured control instructions <syntax-instr-contr
 
 For each value, the value stack records its :ref:`value type <syntax-valtype>`.
 
-For each entered block, the control stack records a *control frame* with the type of the associated :ref:`label <syntax-label>` (used to type-check branches), the result type of the block (used to check its result), the height of the operand stack at the start of the block (used to check that operands do not underflow the current block), and a flag recording whether the remainder of the block is unreachable (used to handle :ref:`stack-polymorphic <polymorphism>` typing after branches).
-
-.. note::
-   In the presentation of this algorithm, multiple values are supported for the :ref:`result types <syntax-resulttype>` classifying blocks and labels.
-   With the current version of WebAssembly, the :code:`list` could be simplified to an optional value.
+For each entered block, the control stack records a *control frame* with the originating opcode, the types on the top of the operand stack at the start and end of the block (used to check its result as well as branches), the height of the operand stack at the start of the block (used to check that operands do not underflow the current block), and a flag recording whether the remainder of the block is unreachable (used to handle :ref:`stack-polymorphic <polymorphism>` typing after branches).
 
 For the purpose of presenting the algorithm, the operand and control stacks are simply maintained as global variables:
 
@@ -80,6 +107,17 @@ However, these variables are not manipulated directly by the main checking funct
      if (vals.size() = ctrls[0].height && ctrls[0].unreachable) return Bot
      error_if(vals.size() = ctrls[0].height)
      return vals.pop()
+
+   func pop_num() : num_type | Bot =
+     let actual = pop_val()
+     error_if(not is_num(actual))
+     return actual
+
+   func pop_ref() : ref_type =
+     let actual = pop_val()
+     error_if(not is_ref(actual))
+     if actual = Bot then return Ref(Bot, false)
+     return actual
 
    func pop_val(expect : val_type) : val_type =
      let actual = pop_val()
@@ -114,17 +152,21 @@ The control stack is likewise manipulated through auxiliary functions:
 
 .. code-block:: pseudo
 
-   func push_ctrl(label : list(val_type), out : list(val_type)) =
-     let frame = ctrl_frame(label, out, vals.size(), false)
+   func push_ctrl(opcode : opcode, in : list(val_type), out : list(val_type)) =
+     let frame = ctrl_frame(opcode, in, out, vals.size(), false)
      ctrls.push(frame)
+     push_vals(in)
 
-   func pop_ctrl() : list(val_type) =
+   func pop_ctrl() : ctrl_frame =
      error_if(ctrls.is_empty())
      let frame = ctrls[0]
      pop_vals(frame.end_types)
      error_if(vals.size() =/= frame.height)
      ctrls.pop()
-     return frame.end_types
+     return frame
+
+   func label_types(frame : ctrl_frame) : list(val_types) =
+     return (if frame.opcode == loop then frame.start_types else frame.end_types)
 
    func unreachable() =
      vals.resize(ctrls[0].height)
@@ -136,6 +178,8 @@ It allocates a new frame record recording them along with the current height of 
 Popping a frame first checks that the control stack is not empty.
 It then verifies that the operand stack contains the right types of values expected at the end of the exited block and pops them off the operand stack.
 Afterwards, it checks that the stack has shrunk back to its initial height.
+
+The type of the :ref:`label <syntax-label>` associated with a control frame is either that of the stack at the start or the end of the frame, determined by the opcode that it originates from.
 
 Finally, the current frame can be marked as unreachable.
 In that case, all existing operand types are purged from the value stack, in order to allow for the :ref:`stack-polymorphism <polymorphism>` logic in :code:`pop_val` to take effect.
@@ -172,9 +216,8 @@ Other instructions are checked in a similar manner.
 
        case (select)
          pop_val(I32)
-         let t1 = pop_val()
-         let t2 = pop_val()
-         error_if(not (is_num(t1) && is_num(t2)))
+         let t1 = pop_num()
+         let t2 = pop_num()
          error_if(t1 =/= t2 && t1 =/= Bot && t2 =/= Bot)
          push_val(if (t1 = Bot) t2 else t1)
 
@@ -184,45 +227,77 @@ Other instructions are checked in a similar manner.
          pop_val(t)
          push_val(t)
 
+       case (ref.is_null)
+         pop_ref()
+         push_val(I32)
+
+       case (ref.as_non_null)
+         let rt = pop_ref()
+         push_val(Ref(rt.heap, false))
+
        case (unreachable)
          unreachable()
 
-       case (block t*)
-         push_ctrl([t*], [t*])
+       case (block t1*->t2*)
+         pop_vals([t1*])
+         push_ctrl(block, [t1*], [t2*])
 
-       case (loop t*)
-         push_ctrl([], [t*])
+       case (loop t1*->t2*)
+         pop_vals([t1*])
+         push_ctrl(loop, [t1*], [t2*])
 
-       case (if t*)
+       case (if t1*->t2*)
          pop_val(I32)
-         push_ctrl([t*], [t*])
+         pop_vals([t1*])
+         push_ctrl(if, [t1*], [t2*])
 
        case (end)
-         let results = pop_ctrl()
-         push_vals(results)
+         let frame = pop_ctrl()
+         push_vals(frame.end_types)
 
        case (else)
-         let results = pop_ctrl()
-         push_ctrl(results, results)
+         let frame = pop_ctrl()
+         error_if(frame.opcode =/= if)
+         push_ctrl(else, frame.start_types, frame.end_types)
 
        case (br n)
          error_if(ctrls.size() < n)
-         pop_vals(ctrls[n].label_types)
+         pop_vals(label_types(ctrls[n]))
          unreachable()
 
        case (br_if n)
          error_if(ctrls.size() < n)
          pop_val(I32)
-         pop_vals(ctrls[n].label_types)
-         push_vals(ctrls[n].label_types)
+         pop_vals(label_types(ctrls[n]))
+         push_vals(label_types(ctrls[n]))
 
        case (br_table n* m)
          pop_val(I32)
          error_if(ctrls.size() < m)
-         let arity = ctrls[m].label_types.size()
+         let arity = label_types(ctrls[m]).size()
          foreach (n in n*)
            error_if(ctrls.size() < n)
-           error_if(ctrls[n].label_types.size() =/= arity)
-           push_vals(pop_vals(ctrls[n].label_types))
-         pop_vals(ctrls[m].label_types)
+           error_if(label_types(ctrls[n]).size() =/= arity)
+           push_vals(pop_vals(label_types(ctrls[n])))
+         pop_vals(label_types(ctrls[m]))
          unreachable()
+
+       case (br_on_null n)
+         error_if(ctrls.size() < n)
+         let rt = pop_ref()
+         pop_vals(label_types(ctrls[n]))
+         push_vals(label_types(ctrls[n]))
+         push_val(Ref(rt.heap, false))
+
+       case (call_ref)
+         let rt = pop_ref()
+         if (rt.heap =/= Bot)
+           error_if(not is_def(rt.heap))
+           let t1*->t2* = lookup_def(rt.heap.def)  // TODO
+           pop_vals(t1*)
+           push_vals(t2*)
+
+.. note::
+   It is an invariant under the current WebAssembly instruction set that an operand of :code:`Unknown` type is never duplicated on the stack.
+   This would change if the language were extended with stack instructions like :code:`dup`.
+   Under such an extension, the above algorithm would need to be refined by replacing the :code:`Unknown` type with proper *type variables* to ensure that all uses are consistent.
