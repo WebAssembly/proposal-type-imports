@@ -1,12 +1,13 @@
 open Types
 
-type context = Types.def_type list
+type bound_type = DefType of def_type | TypeType of type_type
+type context = bound_type list
 type assump = (var * var) list
 
 
 let lookup c = function
   | SynVar x -> Lib.List32.nth c x
-  | SemVar x -> def_of x
+  | SemVar x -> DefType (def_of x)
 
 let equal_var x y =
   match x, y with
@@ -35,7 +36,25 @@ let rec eq_num_type c a t1 t2 =
 and eq_heap_type c a t1 t2 =
   match t1, t2 with
   | DefHeapType x1, DefHeapType x2 -> eq_var_type c a x1 x2
+  | _, DefHeapType x2 ->
+    (match lookup c x2 with
+    | TypeType (EqType t2') -> eq_heap_type c a t1 t2'
+    | _ -> false
+    )
+  | DefHeapType x1, _ ->
+    (match lookup c x1 with
+    | TypeType (EqType t1') -> eq_heap_type c a t1' t2
+    | _ -> false
+    )
   | _, _ -> t1 = t2
+
+and eq_var_type c a x1 x2 =
+  equal_var x1 x2 || assuming a (x1, x2) ||
+  match lookup c x1, lookup c x2 with
+  | DefType dt1, DefType dt2 -> eq_def_type c ((x1, x2)::a) dt1 dt2
+  | TypeType (EqType ht1), _ -> eq_heap_type c ((x1, x2)::a) ht1 (DefHeapType x2)
+  | _, TypeType (EqType ht2) -> eq_heap_type c ((x1, x2)::a) (DefHeapType x1) ht2
+  | _ -> false
 
 and eq_ref_type c a t1 t2 =
   match t1, t2 with
@@ -59,10 +78,12 @@ and eq_def_type c a dt1 dt2 =
   match dt1, dt2 with
   | FuncDefType ft1, FuncDefType ft2 -> eq_func_type c a ft1 ft2
 
-and eq_var_type c a x1 x2 =
-  equal_var x1 x2 || assuming a (x1, x2) ||
-  eq_def_type c ((x1, x2)::a) (lookup c x1) (lookup c x2)
 
+and eq_type_type c a t1 t2 =
+  match t1, t2 with
+  | EqType ht1, EqType ht2 -> eq_heap_type c a ht1 ht2
+  | SubType ht1, SubType ht2 -> eq_heap_type c a ht1 ht2
+  | _ -> false
 
 and eq_table_type c a (TableType (lim1, t1)) (TableType (lim2, t2)) =
   eq_limits c a lim1 lim2 && eq_ref_type c a t1 t2
@@ -75,6 +96,7 @@ and eq_global_type c a (GlobalType (t1, mut1)) (GlobalType (t2, mut2)) =
 
 and eq_extern_type c a et1 et2 =
   match et1, et2 with
+  | ExternTypeType tt1, ExternTypeType tt2 -> eq_type_type c a tt1 tt2
   | ExternFuncType ft1, ExternFuncType ft2 -> eq_func_type c a ft1 ft2
   | ExternTableType tt1, ExternTableType tt2 -> eq_table_type c a tt1 tt2
   | ExternMemoryType mt1, ExternMemoryType mt2 -> eq_memory_type c a mt1 mt2
@@ -101,14 +123,30 @@ let rec match_num_type c a t1 t2 =
 
 and match_heap_type c a t1 t2 =
   match t1, t2 with
-  | DefHeapType x1, FuncHeapType ->
-    (match lookup c x1 with
-    | FuncDefType _ -> true
-    )
-  | DefHeapType x1, DefHeapType x2 -> match_var_type c a x1 x2
   | _, AnyHeapType -> true
   | BotHeapType, _ -> true
-  | _, _ -> eq_heap_type c [] t1 t2
+  | DefHeapType x1, DefHeapType x2 -> match_var_type c a x1 x2
+  | _, DefHeapType x2 ->
+    (match lookup c x2 with
+    | TypeType (EqType t2') -> match_heap_type c a t1 t2'
+    | _ -> false
+    )
+  | DefHeapType x1, _ ->
+    (match lookup c x1 with
+    | DefType (FuncDefType _) -> t2 = FuncHeapType
+    | TypeType (EqType t1') -> match_heap_type c a t1' t2
+    | TypeType (SubType t1') -> match_heap_type c a t1' t2
+    )
+  | _, _ -> t1 = t2
+
+and match_var_type c a x1 x2 =
+  equal_var x1 x2 || assuming a (x1, x2) ||
+  match lookup c x1, lookup c x2 with
+  | DefType dt1, DefType dt2 -> match_def_type c ((x1, x2)::a) dt1 dt2
+  | TypeType (EqType ht1), _ -> match_heap_type c ((x1, x2)::a) ht1 (DefHeapType x2)
+  | TypeType (SubType ht1), _ -> match_heap_type c ((x1, x2)::a) ht1 (DefHeapType x2)
+  | _, TypeType (EqType ht2) -> match_heap_type c ((x1, x2)::a) (DefHeapType x1) ht2
+  | _ -> false
 
 and match_ref_type c a t1 t2 =
   match t1, t2 with
@@ -125,6 +163,13 @@ and match_value_type c a t1 t2 =
 and match_stack_type c a ts1 ts2 =
   List.length ts1 = List.length ts2 &&
   List.for_all2 (match_value_type c a) ts1 ts2
+
+and match_type_type c a t1 t2 =
+  match t1, t2 with
+  | EqType ht1, EqType ht2 -> eq_heap_type c a ht1 ht2
+  | EqType ht1, SubType ht2 -> match_heap_type c a ht1 ht2
+  | SubType ht1, SubType ht2 -> match_heap_type c a ht1 ht2
+  | _ -> false
 
 and match_func_type c a ft1 ft2 =
   eq_func_type c [] ft1 ft2
@@ -143,6 +188,7 @@ and match_global_type c a (GlobalType (t1, mut1)) (GlobalType (t2, mut2)) =
 
 and match_extern_type c a et1 et2 =
   match et1, et2 with
+  | ExternTypeType tt1, ExternTypeType tt2 -> match_type_type c a tt1 tt2
   | ExternFuncType ft1, ExternFuncType ft2 -> match_func_type c a ft1 ft2
   | ExternTableType tt1, ExternTableType tt2 -> match_table_type c a tt1 tt2
   | ExternMemoryType mt1, ExternMemoryType mt2 -> match_memory_type c a mt1 mt2
@@ -150,8 +196,5 @@ and match_extern_type c a et1 et2 =
   | _, _ -> false
 
 and match_def_type c a dt1 dt2 =
-  eq_def_type c [] dt1 dt2
-
-and match_var_type c a x1 x2 =
-  equal_var x1 x2 || assuming a (x1, x2) ||
-  match_def_type c ((x1, x2)::a) (lookup c x1) (lookup c x2)
+  match dt1, dt2 with
+  | FuncDefType ft1, FuncDefType ft2 -> match_func_type c a ft1 ft2

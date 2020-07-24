@@ -193,7 +193,7 @@ let inline_func_type_explicit (c : context) x ft at =
 %token CONST UNARY BINARY TEST COMPARE CONVERT
 %token REF_NULL REF_FUNC REF_EXTERN REF_ANY REF_IS_NULL REF_AS_NON_NULL
 %token FUNC START TYPE PARAM RESULT LOCAL GLOBAL
-%token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT
+%token TABLE ELEM MEMORY DATA DECLARE OFFSET ITEM IMPORT EXPORT EQ SUB
 %token MODULE BIN QUOTE
 %token SCRIPT REGISTER INVOKE GET
 %token ASSERT_MALFORMED ASSERT_INVALID ASSERT_SOFT_INVALID ASSERT_UNLINKABLE
@@ -273,6 +273,10 @@ global_type :
 
 def_type :
   | LPAR FUNC func_type RPAR { fun c -> FuncDefType ($3 c) }
+
+type_type :
+  | LPAR EQ heap_type RPAR { fun c -> EqType ($3 c) }
+  | LPAR SUB heap_type RPAR { fun c -> SubType ($3 c) }
 
 func_type :
   | /* empty */
@@ -956,6 +960,9 @@ global_fields :
 /* Imports & Exports */
 
 import_desc :
+  | LPAR TYPE bind_var_opt type_type RPAR
+    { fun c -> ignore ($3 c anon_type bind_type);
+      fun () -> TypeImport ($4 c) }
   | LPAR FUNC bind_var_opt type_use RPAR
     { fun c -> ignore ($3 c anon_func bind_func);
       fun () -> FuncImport ($4 c type_) }
@@ -983,6 +990,7 @@ inline_import :
   | LPAR IMPORT name name RPAR { $3, $4 }
 
 export_desc :
+  | LPAR TYPE heap_type RPAR { fun c -> TypeExport ($3 c) }
   | LPAR FUNC var RPAR { fun c -> FuncExport ($3 c func) }
   | LPAR TABLE var RPAR { fun c -> TableExport ($3 c table) }
   | LPAR MEMORY var RPAR { fun c -> MemoryExport ($3 c memory) }
@@ -1008,6 +1016,26 @@ type_def :
     { fun c -> ignore (anon_type c); fun () -> $3 c }
   | LPAR TYPE bind_var type_ RPAR  /* Sugar */
     { fun c -> ignore (bind_type c $3); fun () -> $4 c }
+
+/* TODO: sugar
+type_def :
+  | LPAR TYPE bind_var_opt type_fields RPAR
+    { let at = at () in
+      fun c -> let x = $3 c anon_type bind_type @@ at in
+      fun () -> $4 c x at }
+
+type_fields :
+  | type_
+    { fun c x at -> [$1 c @@ at], [], [] }
+  | inline_import type_type  /* Sugar * /
+    { fun c x at ->
+      [],
+      [{ module_name = fst $1; item_name = snd $1;
+         idesc = TypeImport ($2 c) @@ at } @@ at], [] }
+  | inline_export type_fields  /* Sugar * /
+    { fun c x at -> let types, ims, exs = $2 c x at in
+      types, ims, $1 (TypeExport (DefHeapType (SynVar x.it))) c :: exs }
+*/
 
 start :
   | LPAR START var RPAR

@@ -65,6 +65,9 @@ let decls kind ts = tab kind (atom value_type) ts
 let func_type (FuncType (ins, out)) =
   Node ("func", decls "param" ins @ decls "result" out)
 
+let type_type tt =
+  Node (string_of_type_type tt, [])
+
 let def_type dt =
   match dt with
   | FuncDefType ft -> func_type ft
@@ -370,11 +373,13 @@ let data i seg =
 
 (* Modules *)
 
-let type_ i ty =
-  Node ("type $" ^ nat i, [def_type ty.it])
+let type_ off i ty =
+  Node ("type $" ^ nat (off + i), [def_type ty.it])
 
-let import_desc fx tx mx gx d =
+let import_desc hx fx tx mx gx d =
   match d.it with
+  | TypeImport t ->
+    incr hx; Node ("type $" ^ nat (!hx - 1), [type_type t])
   | FuncImport x ->
     incr fx; Node ("func $" ^ nat (!fx - 1), [Node ("type", [atom var x])])
   | TableImport t ->
@@ -384,14 +389,15 @@ let import_desc fx tx mx gx d =
   | GlobalImport t ->
     incr gx; Node ("global $" ^ nat (!gx - 1), [global_type t])
 
-let import fx tx mx gx im =
+let import hx fx tx mx gx im =
   let {module_name; item_name; idesc} = im.it in
   Node ("import",
-    [atom name module_name; atom name item_name; import_desc fx tx mx gx idesc]
+    [atom name module_name; atom name item_name; import_desc hx fx tx mx gx idesc]
   )
 
 let export_desc d =
   match d.it with
+  | TypeExport ht -> Node ("type", [atom heap_type ht])
   | FuncExport x -> Node ("func", [atom var x])
   | TableExport x -> Node ("table", [atom var x])
   | MemoryExport x -> Node ("memory", [atom var x])
@@ -413,13 +419,14 @@ let var_opt = function
   | Some x -> " " ^ x.it
 
 let module_with_var_opt x_opt m =
+  let hx = ref 0 in
   let fx = ref 0 in
   let tx = ref 0 in
   let mx = ref 0 in
   let gx = ref 0 in
-  let imports = list (import fx tx mx gx) m.it.imports in
+  let imports = list (import hx fx tx mx gx) m.it.imports in
   Node ("module" ^ var_opt x_opt,
-    listi type_ m.it.types @
+    listi (type_ !hx) m.it.types @
     imports @
     listi (table !tx) m.it.tables @
     listi (memory !mx) m.it.memories @

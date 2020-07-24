@@ -189,6 +189,7 @@ type type_ = def_type Source.phrase
 
 type export_desc = export_desc' Source.phrase
 and export_desc' =
+  | TypeExport of heap_type
   | FuncExport of idx
   | TableExport of idx
   | MemoryExport of idx
@@ -203,6 +204,7 @@ and export' =
 
 type import_desc = import_desc' Source.phrase
 and import_desc' =
+  | TypeImport of type_type
   | FuncImport of idx
   | TableImport of table_type
   | MemoryImport of memory_type
@@ -250,6 +252,10 @@ let empty_module =
 
 open Source
 
+let type_imports (m : module_) : type_type list =
+  Lib.List.map_filter (fun im ->
+    match im.it.idesc.it with TypeImport t -> Some t | _ -> None) m.it.imports
+
 let func_type_of (m : module_) (x : idx) : func_type =
   as_func_def_type (Lib.List32.nth m.it.types x.it).it
 
@@ -257,6 +263,7 @@ let import_type_of (m : module_) (im : import) : import_type =
   let {idesc; module_name; item_name} = im.it in
   let et =
     match idesc.it with
+    | TypeImport t -> ExternTypeType t
     | FuncImport x -> ExternFuncType (func_type_of m x)
     | TableImport t -> ExternTableType t
     | MemoryImport t -> ExternMemoryType t
@@ -270,6 +277,8 @@ let export_type_of (m : module_) (ex : export) : export_type =
   let open Lib.List32 in
   let et =
     match edesc.it with
+    | TypeExport t ->
+      ExternTypeType (EqType t)
     | FuncExport x ->
       let fts =
         funcs ets @ List.map (fun f -> func_type_of m f.it.ftype) m.it.funcs

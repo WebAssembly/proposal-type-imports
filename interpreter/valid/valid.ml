@@ -17,7 +17,7 @@ let require b at s = if not b then error at s
 
 type context =
 {
-  types : def_type list;
+  types : Match.bound_type list;
   funcs : syn_var list;
   tables : table_type list;
   memories : memory_type list;
@@ -51,9 +51,17 @@ let data (c : context) x = lookup "data segment" c.datas x
 let local (c : context) x = lookup "local" c.locals x
 let label (c : context) x = lookup "label" c.labels x
 
-let func_type (c : context) x =
+let rec func_type (c : context) x =
   match type_ c x with
-  | FuncDefType ft -> ft
+  | DefType (FuncDefType ft) -> ft
+  | TypeType (EqType ht) ->
+    (match ht with
+    | DefHeapType (SynVar x') -> func_type c (x' @@ x.at)
+    | _ ->
+      error x.at ("type " ^ Int32.to_string x.it ^ " is not an exact function type")
+    )
+  | TypeType (SubType ht) ->
+    error x.at ("type " ^ Int32.to_string x.it ^ " is not an exact function type")
 
 let func (c : context) x = func_type c (func_var c x @@ x.at)
 
@@ -82,7 +90,7 @@ let check_num_type (c : context) (t : num_type) at =
 let check_heap_type (c : context) (t : heap_type) at =
   match t with
   | FuncHeapType | ExternHeapType | AnyHeapType -> ()
-  | DefHeapType (SynVar x) -> ignore (func_type c (x @@ at))
+  | DefHeapType (SynVar x) -> ignore (type_ c (x @@ at))
   | DefHeapType (SemVar _) | BotHeapType -> assert false
 
 let check_ref_type (c : context) (t : ref_type) at =
@@ -114,6 +122,11 @@ let check_memory_type (c : context) (mt : memory_type) at =
 let check_global_type (c : context) (gt : global_type) at =
   let GlobalType (t, mut) = gt in
   check_value_type c t at
+
+let check_type_type (c : context) (tt : type_type) at =
+  match tt with
+  | EqType ht -> check_heap_type c ht at
+  | SubType ht -> check_heap_type c ht at
 
 let check_def_type (c : context) (dt : def_type) at =
   match dt with
@@ -657,6 +670,9 @@ let check_start (c : context) (start : idx option) =
 let check_import (im : import) (c : context) : context =
   let {module_name = _; item_name = _; idesc} = im.it in
   match idesc.it with
+  | TypeImport tt ->
+    check_type_type c tt idesc.at;
+    {c with types = TypeType tt :: c.types}
   | FuncImport x ->
     ignore (func_type c x);
     {c with funcs = x.it :: c.funcs}
@@ -675,6 +691,7 @@ module NameSet = Set.Make(struct type t = Ast.name let compare = compare end)
 let check_export (c : context) (set : NameSet.t) (ex : export) : NameSet.t =
   let {name; edesc} = ex.it in
   (match edesc.it with
+  | TypeExport ht -> check_heap_type c ht edesc.at
   | FuncExport x -> ignore (func c x)
   | TableExport x -> ignore (table c x)
   | MemoryExport x -> ignore (memory c x)
@@ -693,7 +710,9 @@ let check_module (m : module_) =
     List.fold_right check_import imports
       { empty_context with
         refs = Free.module_ ({m.it with funcs = []; start = None} @@ m.at);
-        types = List.map (fun ty -> ty.it) types;
+        types =
+          List.map (fun tt -> TypeType tt) (type_imports m) @
+          List.map (fun ty -> DefType ty.it) types;
       }
   in
   let c1 =

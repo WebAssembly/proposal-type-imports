@@ -6,15 +6,16 @@ and syn_var = int32
 and sem_var = def_type Lib.Promise.t
 and var = SynVar of syn_var | SemVar of sem_var
 
+and heap_type =
+  | DefHeapType of var
+  | FuncHeapType
+  | ExternHeapType
+  | AnyHeapType
+  | BotHeapType
+
 and nullability = NonNullable | Nullable
 and num_type = I32Type | I64Type | F32Type | F64Type
 and ref_type = nullability * heap_type
-and heap_type =
-  | FuncHeapType
-  | ExternHeapType
-  | DefHeapType of var
-  | AnyHeapType
-  | BotHeapType
 
 and value_type = NumType of num_type | RefType of ref_type | BotType
 and stack_type = value_type list
@@ -23,10 +24,12 @@ and def_type = FuncDefType of func_type
 
 type 'a limits = {min : 'a; max : 'a option}
 type mutability = Immutable | Mutable
+type type_type = EqType of heap_type | SubType of heap_type
 type table_type = TableType of Int32.t limits * ref_type
 type memory_type = MemoryType of Int32.t limits
 type global_type = GlobalType of value_type * mutability
 type extern_type =
+  | ExternTypeType of type_type
   | ExternFuncType of func_type
   | ExternTableType of table_type
   | ExternMemoryType of memory_type
@@ -87,6 +90,8 @@ let extern_type_of_export_type (ExportType (et, _)) = et
 
 (* Filters *)
 
+let types =
+  Lib.List.map_filter (function ExternTypeType t -> Some t | _ -> None)
 let funcs =
   Lib.List.map_filter (function ExternFuncType t -> Some t | _ -> None)
 let tables =
@@ -109,17 +114,14 @@ let def_of x = Lib.Promise.value x
 (* Conversion *)
 
 let sem_var_type c = function
-  | SynVar x -> SemVar (Lib.List32.nth c x)
+  | SynVar x -> Lib.List32.nth c x
   | SemVar _ -> assert false
 
 let sem_num_type c t = t
 
 let sem_heap_type c = function
-  | FuncHeapType -> FuncHeapType
-  | ExternHeapType -> ExternHeapType
-  | DefHeapType x -> DefHeapType (sem_var_type c x)
-  | AnyHeapType -> AnyHeapType
-  | BotHeapType -> BotHeapType
+  | DefHeapType x -> sem_var_type c x
+  | t -> t
 
 let sem_ref_type c = function
   | (nul, t) -> (nul, sem_heap_type c t)
@@ -132,6 +134,11 @@ let sem_value_type c = function
 let sem_stack_type c ts =
  List.map (sem_value_type c) ts
 
+
+let sem_type_type c tt =
+  match tt with
+  | EqType ht -> EqType (sem_heap_type c ht)
+  | SubType ht -> SubType (sem_heap_type c ht)
 
 let sem_memory_type c (MemoryType lim) =
   MemoryType lim
@@ -146,6 +153,7 @@ let sem_func_type c (FuncType (ins, out)) =
   FuncType (sem_stack_type c ins, sem_stack_type c out)
 
 let sem_extern_type c = function
+  | ExternTypeType ht -> ExternTypeType (sem_type_type c ht)
   | ExternFuncType ft -> ExternFuncType (sem_func_type c ft)
   | ExternTableType tt -> ExternTableType (sem_table_type c tt)
   | ExternMemoryType mt -> ExternMemoryType (sem_memory_type c mt)
@@ -163,8 +171,12 @@ let sem_import_type c (ImportType (et, module_name, name)) =
   ImportType (sem_extern_type c et, module_name, name)
 
 let sem_module_type (ModuleType (dts, its, ets)) =
-  let c = List.map (fun _ -> alloc_uninit ()) dts in
-  List.iter2 (fun x dt -> init x (sem_def_type c dt)) c dts;
+  let tts = types (List.map extern_type_of_import_type its) in
+  let xs = List.map (fun _ -> alloc_uninit ()) dts in
+  let c =
+    Lib.List32.mapi (fun i _ -> DefHeapType (SynVar i)) tts @
+    List.map (fun x -> DefHeapType (SemVar x)) xs in
+  List.iter2 (fun x dt -> init x (sem_def_type c dt)) xs dts;
   let its = List.map (sem_import_type c) its in
   let ets = List.map (sem_export_type c) ets in
   ModuleType ([], its, ets)
@@ -252,7 +264,12 @@ let string_of_global_type = function
   | GlobalType (t, Immutable) -> string_of_value_type t
   | GlobalType (t, Mutable) -> "(mut " ^ string_of_value_type t ^ ")"
 
+let string_of_type_type = function
+  | EqType ht -> "eq " ^ string_of_heap_type ht
+  | SubType ht -> "sub " ^ string_of_heap_type ht
+
 let string_of_extern_type = function
+  | ExternTypeType ht -> "type (" ^ string_of_type_type ht ^ ")"
   | ExternFuncType ft -> "func " ^ string_of_func_type ft
   | ExternTableType tt -> "table " ^ string_of_table_type tt
   | ExternMemoryType mt -> "memory " ^ string_of_memory_type mt

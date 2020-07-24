@@ -97,7 +97,14 @@ let elem (inst : module_inst) x = lookup "element segment" inst.elems x
 let data (inst : module_inst) x = lookup "data segment" inst.datas x
 let local (frame : frame) x = lookup "local" frame.locals x
 
-let func_type (inst : module_inst) x = as_func_def_type (def_of (type_ inst x))
+let def_type (inst : module_inst) x =
+  match type_ inst x with
+  | DefHeapType (SemVar x') -> x'
+  | _ ->
+    Crash.error x.at ("type " ^ Int32.to_string x.it ^ " is not a defined type")
+
+let func_type (inst : module_inst) x =
+  as_func_def_type (def_of (def_type inst x))
 
 let any_ref inst x i at =
   try Table.load (table inst x) i with Table.Bounds ->
@@ -258,7 +265,7 @@ let rec step (c : config) : config =
           try split (List.length ts - List.length ts') vs e.at
           with Failure _ -> Crash.error e.at "type mismatch at function bind"
         in
-        let f' = Func.alloc_closure (type_ c.frame.inst x) f args in
+        let f' = Func.alloc_closure (def_type c.frame.inst x) f args in
         Ref (FuncRef f') :: vs', []
 
       | Drop, v :: vs' ->
@@ -482,7 +489,7 @@ let rec step (c : config) : config =
         vs, []
 
       | RefNull t, vs' ->
-        Ref (NullRef (sem_heap_type c.frame.inst.types t)) :: vs', []
+        Ref (NullRef (Types.sem_heap_type c.frame.inst.types t)) :: vs', []
 
       | RefIsNull, Ref r :: vs' ->
         (match r with
@@ -658,11 +665,11 @@ let eval_const (inst : module_inst) (const : const) : value =
 
 (* Modules *)
 
-let create_type (_ : type_) : type_inst =
+let create_type (_ : type_) : sem_var =
   Types.alloc_uninit ()
 
 let create_func (inst : module_inst) (f : func) : func_inst =
-  Func.alloc (type_ inst f.it.ftype) (Lib.Promise.make ()) f
+  Func.alloc (def_type inst f.it.ftype) (Lib.Promise.make ()) f
 
 let create_table (inst : module_inst) (tab : table) : table_inst =
   let {ttype} = tab.it in
@@ -682,6 +689,7 @@ let create_export (inst : module_inst) (ex : export) : export_inst =
   let {name; edesc} = ex.it in
   let ext =
     match edesc.it with
+    | TypeExport t -> ExternType (Types.sem_heap_type inst.types t)
     | FuncExport x -> ExternFunc (func inst x)
     | TableExport x -> ExternTable (table inst x)
     | MemoryExport x -> ExternMemory (memory inst x)
@@ -697,21 +705,28 @@ let create_data (inst : module_inst) (seg : data_segment) : data_inst =
   ref dinit
 
 
-let add_import (m : module_) (ext : extern) (im : import) (inst : module_inst)
-  : module_inst =
+let add_import (m : module_) (types : type_inst list)
+  (ext : extern) (im : import) (inst : module_inst) : module_inst =
   let it = extern_type_of_import_type (import_type_of m im) in
-  let et = Types.sem_extern_type inst.types it in
-  let et' = extern_type_of inst.types ext in
+  let et = Types.sem_extern_type types it in
+  let et' = extern_type_of types ext in
   if not (Match.match_extern_type [] [] et' et) then
-    Link.error im.at "incompatible import type";
+(
+Printf.printf "types: (%s)\n%!" (string_of_import_type (import_type_of m im));
+List.iteri (fun i ht -> Printf.printf "%d = %s\n%!" i (string_of_heap_type ht)) types;
+    Link.error im.at
+      ("incompatible import type: external type (" ^ string_of_extern_type et' ^
+       ") does not match import type (" ^ string_of_extern_type et ^ ")");
+);
   match ext with
+  | ExternType type_ -> {inst with types = type_ :: inst.types}
   | ExternFunc func -> {inst with funcs = func :: inst.funcs}
   | ExternTable tab -> {inst with tables = tab :: inst.tables}
   | ExternMemory mem -> {inst with memories = mem :: inst.memories}
   | ExternGlobal glob -> {inst with globals = glob :: inst.globals}
 
 
-let init_type (inst : module_inst) (type_ : type_) (x : type_inst) =
+let init_type (inst : module_inst) (type_ : type_) (x : sem_var) =
   Types.init x (Types.sem_def_type inst.types type_.it)
 
 let init_func (inst : module_inst) (func : func_inst) =
@@ -760,11 +775,25 @@ let init (m : module_) (exts : extern list) : module_inst =
   in
   if List.length exts <> List.length imports then
     Link.error m.at "wrong number of imports provided for initialisation";
-  let inst0 = {empty_module_inst with types = List.map create_type types} in
-  List.iter2 (init_type inst0) types inst0.types;
-  let inst1 = List.fold_right2 (add_import m) exts imports inst0 in
+  let xs = List.map create_type types in
+  let inst0 =
+    { empty_module_inst with
+      types = Instance.types exts @ List.map (fun x -> DefHeapType (SemVar x)) xs
+    }
+  in
+  List.iter2 (init_type inst0) types xs;
+  let inst1 = List.fold_right2 (add_import m inst0.types) exts imports empty_module_inst in
+  let inst1 =
+    { inst1 with
+      types = inst1.types @ List.map (fun x -> DefHeapType (SemVar x)) xs
+    }
+  in
   let fs = List.map (create_func inst1) funcs in
-  let inst2 = {inst1 with funcs = inst1.funcs @ fs} in
+  let inst2 =
+    { inst1 with
+      funcs = inst1.funcs @ fs
+    }
+  in
   let inst3 =
     { inst2 with
       tables = inst2.tables @ List.map (create_table inst2) tables;

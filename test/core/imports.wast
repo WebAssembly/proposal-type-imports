@@ -15,6 +15,16 @@
   (memory (export "memory-2-inf") 2)
   ;; Multiple memories are not yet supported
   ;; (memory (export "memory-2-4") 2 4)
+  ;; TODO: sugar
+  ;; (type (export "type-any") any)
+  (export "type-any" (type any))
+  ;; (type (export "type-extern") extern)
+  (export "type-extern" (type extern))
+  ;; (type (export "type-func") func)
+  (export "type-func" (type func))
+  ;; (type (export "type-func-i32") (func (param i32)))
+  (type $t (func (param i32)))
+  (export "type-func-i32" (type $t))
 )
 
 (register "test")
@@ -505,6 +515,104 @@
 (assert_return (invoke "grow" (i32.const 0)) (i32.const 2))
 (assert_return (invoke "grow" (i32.const 1)) (i32.const -1))
 (assert_return (invoke "grow" (i32.const 0)) (i32.const 2))
+
+
+;; Types
+
+(module
+  (type $func-i32 (func (param i32)))
+  ;; TODO: sugar
+  ;;(type (import "test" "type-any") (eq any))
+  ;;(type (import "test" "type-any") (sub any))
+  ;;(type (import "test" "type-extern") (eq extern))
+  ;;(type (import "test" "type-extern") (sub extern))
+  ;;(type (import "test" "type-extern") (sub any))
+  ;;(type (import "test" "type-func") (eq func))
+  ;;(type (import "test" "type-func") (sub func))
+  ;;(type (import "test" "type-func-i32") (eq $func-32))
+  ;;(type (import "test" "type-func-i32") (sub $func-32))
+  ;;(type (import "test" "type-func-i32") (sub func))
+  ;;(type (import "test" "type-func-i32") (sub any))
+  (import "test" "type-any" (type (eq any)))
+  (import "test" "type-any" (type (sub any)))
+  (import "test" "type-extern" (type (eq extern)))
+  (import "test" "type-extern" (type (sub extern)))
+  (import "test" "type-extern" (type (sub any)))
+  (import "test" "type-func" (type (eq func)))
+  (import "test" "type-func" (type (sub func)))
+  (import "test" "type-func-i32" (type (eq 10)))
+  (import "test" "type-func-i32" (type (sub 10)))
+  (import "test" "type-func-i32" (type (sub func)))
+)
+
+(assert_unlinkable
+  (module
+    ;; TODO: sugar
+    ;;(type (import "test" "type-any") (eq extern))
+    (import "test" "type-any" (type (eq extern)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    ;; TODO: sugar
+    ;;(type (import "test" "type-any") (sub extern))
+    (import "test" "type-any" (type (sub extern)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    ;; TODO: sugar
+    ;;(type (import "test" "type-any") (eq func))
+    (import "test" "type-any" (type (eq func)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    ;; TODO: sugar
+    ;;(type (import "test" "type-any") (sub func))
+    (import "test" "type-any" (type (sub func)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    (type $func-i32 (func (param i32)))
+    ;; TODO: sugar
+    ;;(type (import "test" "type-func") (eq $func-i32))
+    (import "test" "type-func" (type (eq 1)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    (type $func-i32 (func (param i32)))
+    ;; TODO: sugar
+    ;;(type (import "test" "type-func") (sub $func-i32))
+    (import "test" "type-func" (type (sub 1)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    (type $func (func))
+    ;; TODO: sugar
+    ;;(type (import "test" "type-func") (eq $func))
+    (import "test" "type-func" (type (eq 1)))
+  )
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module
+    (type $func (func))
+    ;; TODO: sugar
+    ;;(type (import "test" "type-func-i32") (sub $func))
+    (import "test" "type-func-i32" (type (sub 1)))
+  )
+  "incompatible import type"
+)
 
 
 ;; Syntax errors

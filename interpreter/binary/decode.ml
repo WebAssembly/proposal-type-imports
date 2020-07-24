@@ -201,6 +201,12 @@ let global_type s =
   let mut = mutability s in
   GlobalType (t, mut)
 
+let type_type s =
+  match u8 s with
+  | 0 -> EqType (heap_type s)
+  | 1 -> SubType (heap_type s)
+  | _ -> error s (pos s - 1) "malformed type type"
+
 let def_type s =
   FuncDefType (func_type s)
 
@@ -598,6 +604,7 @@ let import_desc s =
   | 0x01 -> TableImport (table_type s)
   | 0x02 -> MemoryImport (memory_type s)
   | 0x03 -> GlobalImport (global_type s)
+  | 0x05 -> TypeImport (type_type s)
   | _ -> error s (pos s - 1) "malformed import kind"
 
 let import s =
@@ -655,6 +662,7 @@ let export_desc s =
   | 0x01 -> TableExport (at var s)
   | 0x02 -> MemoryExport (at var s)
   | 0x03 -> GlobalExport (at var s)
+  | 0x05 -> TypeExport (heap_type s)
   | _ -> error s (pos s - 1) "malformed export kind"
 
 let export s =

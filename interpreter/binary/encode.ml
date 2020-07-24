@@ -136,6 +136,10 @@ let encode m =
     let global_type = function
       | GlobalType (t, mut) -> value_type t; mutability mut
 
+    let type_type = function
+      | EqType ht -> u8 0; heap_type ht
+      | SubType ht -> u8 1; heap_type ht
+
     let def_type = function
       | FuncDefType ft -> func_type ft
 
@@ -456,6 +460,7 @@ let encode m =
       | TableImport t -> u8 0x01; table_type t
       | MemoryImport t -> u8 0x02; memory_type t
       | GlobalImport t -> u8 0x03; global_type t
+      | TypeImport t -> u8 0x05; type_type t
 
     let import im =
       let {module_name; item_name; idesc} = im.it in
@@ -497,10 +502,11 @@ let encode m =
     (* Export section *)
     let export_desc d =
       match d.it with
-      | FuncExport x -> u8 0; var x
-      | TableExport x -> u8 1; var x
-      | MemoryExport x -> u8 2; var x
-      | GlobalExport x -> u8 3; var x
+      | FuncExport x -> u8 0x00; var x
+      | TableExport x -> u8 0x01; var x
+      | MemoryExport x -> u8 0x02; var x
+      | GlobalExport x -> u8 0x03; var x
+      | TypeExport ht -> u8 0x05; heap_type ht
 
     let export ex =
       let {name = n; edesc} = ex.it in

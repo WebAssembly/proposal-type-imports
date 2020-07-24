@@ -12,4 +12,4 @@ val alloc_host : sem_var -> (value list -> value list) -> 'inst func
 val alloc_closure : sem_var -> 'inst func -> value list -> 'inst func
 
 val type_of : 'inst func -> func_type
-val type_inst_of : 'inst func -> sem_var
+val type_var_of : 'inst func -> sem_var

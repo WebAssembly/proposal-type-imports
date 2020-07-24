@@ -1,6 +1,7 @@
 open Types
 
-type context = def_type list
+type bound_type = DefType of def_type | TypeType of type_type
+type context = bound_type list
 type assump = (var * var) list
 
 

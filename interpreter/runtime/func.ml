@@ -11,9 +11,9 @@ let alloc x inst f = AstFunc (x, inst, f)
 let alloc_host x f = HostFunc (x, f)
 let alloc_closure x func vs = ClosureFunc (x, func, vs)
 
-let type_inst_of = function
+let type_var_of = function
   | AstFunc (x, _, _) -> x
   | HostFunc (x, _) -> x
   | ClosureFunc (x, _, _) -> x
 
-let type_of f = as_func_def_type (def_of (type_inst_of f))
+let type_of f = as_func_def_type (def_of (type_var_of f))

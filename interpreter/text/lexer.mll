@@ -169,6 +169,8 @@ rule token = parse
   | "anyref" { ANYREF }
   | (nxx as t) { NUM_TYPE (num_type t) }
   | "mut" { MUT }
+  | "eq" { EQ }
+  | "sub" { SUB }
 
   | (nxx as t)".const"
     { let open Source in

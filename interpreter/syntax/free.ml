@@ -84,6 +84,10 @@ let block_type = function
   | VarBlockType x -> var_type x
   | ValBlockType _ -> empty
 
+let type_type = function
+  | EqType t -> heap_type t
+  | SubType t -> heap_type t
+
 let func_type (FuncType (ins, out)) =
   list value_type ins ++ list value_type out
 let global_type (GlobalType (t, _mut)) = value_type t
@@ -150,6 +154,7 @@ let type_ (t : type_) = def_type t.it
 
 let export_desc (d : export_desc) =
   match d.it with
+  | TypeExport ht -> heap_type ht
   | FuncExport x -> funcs (idx x)
   | TableExport x -> tables (idx x)
   | MemoryExport x -> memories (idx x)
@@ -157,6 +162,7 @@ let export_desc (d : export_desc) =
 
 let import_desc (d : import_desc) =
   match d.it with
+  | TypeImport tt -> type_type tt
   | FuncImport x -> types (idx x)
   | TableImport tt -> table_type tt
   | MemoryImport mt -> memory_type mt
