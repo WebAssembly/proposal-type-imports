@@ -104,7 +104,7 @@ Consequently, the `"file"` module could be implemented either by the host, in wh
 or by another Wasm module, in which case it would probably consist of a private type exported by that module.
 This is immaterial to the client module, which can only store references to it and pass them to the imported functions.
 
-It is perfectly fine to store functions like `$open` or `$close` in a table and invoke `call_indirect` on it:
+It still is perfectly fine to store functions like `$open` or `$close` in a table and invoke `call_indirect` on it:
 ```wasm
 (table $t 10 funcref)
 (elem (table $t) (i32.const 0) $open $close $read)
@@ -125,6 +125,8 @@ A Wasm module could implement the `file` interface in the following manner, usin
   ...
 )
 ```
+
+In the presence of the GC proposal (see below), a client could try to *guess* the type definition for an import, and if it is a scalar or data type (struct or array), could attempt to *cast* a value to that type to reveal its contents. Or vice versa, it could forge a value of the imported type by casting the opposite direction. The use of private types protects against such attempts to break encapsulation, in scenarios where clients are potentially untrusted.
 
 
 ## Language
@@ -162,6 +164,8 @@ Based on the following prerequisite proposals:
 
 * There are additional side conditions on the ordering of type imports and definitions: they can be interleaved, but they are ordered; a type import may only be referenced by later declarations; this ensures that import bounds cannot form a non-productive definitional cycle; consecutive type definitions OTOH may be mutually recursive (the exact details of these rules are TBD and may be relaxed in future versions of Wasm; cf. Module Linking proposal).
 
+Question: For the first version of this extension, we may want to restrict import bounds to abstract heap types like `any` or `func`. Concrete types are unlikely to be useful as bounds without the richer type language from the GC proposal.
+
 
 #### Definitions
 
@@ -181,7 +185,7 @@ Based on the following prerequisite proposals:
 * `type <heaptype>` is an export description
   - `exportdesc ::= ... | type <heaptype>`
   - `(type <heaptype>) ok` iff `<heaptype> ok`
-  - the definition of an export type is transparently visible outside the module, except if it is defined as a private type
+  - the definition of an export type is transparently observable outside the module, unless it is defined as a private type
 
 Question: This does not allow exposing the definition of a private type to cooperating "friend" modules.
 As a more flexible alternative, hiding the definition could be optional via an explicit annotation on type exports.
@@ -235,10 +239,55 @@ There are only two new instructions, for creating and accessing values of privat
     - iff `$t = private t1^i t t2*`
   - traps on `null`
 
+Question: We could consider mutable fields in a private type, which would bring it even closer to a struct as in the GC proposal (see below).
+
 
 ## Binary Format
 
-TODO.
+Note: This is preliminary, expect changes. In particular, we may want to impose strict def-use ordering constraints on type imports and type definitions, which may require splitting up type and/or import sections.
+
+### Imports / Exports
+
+#### External Kind
+
+The following *external kind* is added:
+
+* `0x05` indicating a `Type` import
+
+#### Import section
+
+The import section is extended to include type imports by extending an`import_entry` as follows:
+
+If the `kind` is `Type`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `type_type` | the type being imported |
+
+#### Export section
+
+The export section is extended to reference type imports by extending an `export_entry` as follows:
+
+If the `kind` is `Type`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `heap_type (s33)` | a heap type to export (as type indices are heap types, can also be an index) |
+
+#### Type type
+
+Each `type_type` has the fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `import_kind` | `u8` | The kind of a type import |
+| `bound` | `heap_type (s33)` | The heap type that is a bound for the type import |
+
+An `import_kind` can take the following value:
+
+| Name      | Value | Description |
+|-----------|-------|----------------|
+| Sub | 1     | An import that is a subtype of the bound |
 
 
 ## Forward Compatibility with GC Proposal
