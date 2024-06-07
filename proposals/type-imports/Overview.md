@@ -191,8 +191,14 @@ Based on the following prerequisite proposals:
 The following rule extends the rules for [typed references](https://github.com/WebAssembly/function-references/proposals/function-references/Overview.md#subtyping):
 
 * Imported types are subtypes of their bounds
-  - `(type $t) <: <heaptype>`
+  -  `$t <: <heaptype>`
     - iff `$t = import (sub <heaptype>)`
+
+* The subtyping rules for other type definitions generalise to heap types
+  - `$t <: <heaptype>`
+    - iff `expand($t) = <heaptype>`
+  - `<heaptype> <: $t`
+    - iff `expand($t) = <heaptype>`
 
 **Post-MVP:**
 
