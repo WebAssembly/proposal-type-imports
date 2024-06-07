@@ -4,33 +4,38 @@
 
 ### Motivation
 
-With [reference types](https://github.com/WebAssembly/reference-types), the type `externref` can be used to pass *extern references* from the host to Wasm code and back.
-However, there are two shortcomings of `externref`:
+With [reference types](https://github.com/WebAssembly/reference-types), the type `externref` (or `ref extern`) can be used to pass *extern references* from the host to Wasm code and back.
+Similarly, with [GC types](https://github.com/WebAssembly/gc), the type `anyref` (or `ref any`) can be used to pass generic references from other Wasm modules without locking down their representation.
 
-1. An external reference is essentially untyped.
-   Consequently, a host API needs to perform a runtime type check for every reference that is passed to it.
+However, using these "top" types for abstracting over outside types has the significant drawback that it essentially makes them _untyped_.
+Precise type information is lost when going to these types.
+Consequently, a host API, or another Wasm module, needs to perform a runtime type check for every reference that is passed (back) to it.
 
-2. A value of type `externref` cannot be provided by a Wasm module itself.
-   That makes its use undesirable at import boundaries,
-   where it should be possible to implement any import by either the host or another Wasm module alike.
-
-This proposal therefore allows Wasm modules to *import* type definitions.
-That way, the host can provide custom types and by importing them, client Wasm code can form [typed references](https://github.com/WebAssembly/function-references) `(ref $t)` to them.
-Based on that, a host API can provide functions that expect such typed references and Wasm's type soundness ensures that their type is always satisfied and no runtime check is required on the host side.
+This proposal therefore allows Wasm modules to *import* actual type definitions.
+That way, the host, or another Wasm module, can provide custom types and by importing them, client Wasm code can form [typed references](https://github.com/WebAssembly/function-references) `(ref $t)` to them.
+Based on that, an API can provide functions that expect such typed references and Wasm's type soundness ensures that their type is always satisfied and no runtime check is required on the host side.
 
 Alternatively, the same imports can be provided by another Wasm module.
-In order to maintain encapsulation of such imports, even when defined in Wasm itself, the proposal further introduces the notion of *private* type definitions, which are opaque when exported.
+In order to maintain encapsulation of such imports, even when defined in Wasm itself, the proposal further introduces the notion of *private* type definitions, which are opaque when exported. (This may be a post-MVP feature.)
 
 
 ### Design Rationale
 
-As far as a Wasm module is concerned, _imported_ types are abstract.
-Due to Wasm's staged compilation/instantiation model, an imported type's definition is not known at compile time.
+This proposal is intended as an MVP ("minimal viable product") version of type imports.
+As such, it tries to remain minimally invasive to Wasm's semantics and its compilation model.
+That implies the following:
 
-However, an import may specify a subtype constraint by giving a supertype *bound* with the import (partial abstraction).
-Such an import can only be instantiated by a type that actually is a subtype of the bound.
-The type `any` can be used if no constraint is desired;
-such an import can be instantiated with both an `extern` type provided by the host or a type implemented in Wasm itself.
+* No new class of type definitions is introduced; all type indices continue to refer to (definitions for) heap types, including those denoting imports and exports.
+
+* The representation of all types is still known at compile time. In particular, it does not depend on how a type import is instantiated. Imports specify a heap type bound (a supertype such as `extern`, `any`, `func`, or some subtype thereof) that statically determines their (uniform) representation.
+
+* To avoid the possiblity for mutual dependencies between type imports and type definition sections, and thereby the need for relaxing the section order in the binary format, import bounds are restricted to _abstract_ heap types in the MVP.
+
+* Type imports are purely a validation-time feature, they do not affect the runtime semantics, relative to using top types.
+  (TODO: What about casts?)
+
+As far as a Wasm module is concerned, _imported_ types are abstract.
+Due to Wasm's staged compilation/instantiation model, an imported type's definition is not known at compile time, even though its representation is.
 
 Type _exports_ are transparent by default.
 When using a type export to instantiate the import of another module,
@@ -38,6 +43,8 @@ its full definition is therefore available to verify any import constraints.
 
 However, it also ought to be possible to make type exports opaque,
 in order to *encapsulate* their definition (akin to an abstract data type).
+**At this point we consider this a post-MVP feature.**
+
 There are several requirements for opaque type definitions (called "private" in this proposal):
 
 * Encapsulation must be both static and dynamic. In particular, a cast (like the runtime type check for call_indirect, or a down cast as in the GC proposal) must not pierce through the encapsulation barrier.
@@ -48,37 +55,42 @@ There are several requirements for opaque type definitions (called "private" in 
 
 * Yet, encapsulation must not get in the way of runtime type checks. For example, it must remain possible to `call_indirect` a function with a private type among its parameters (this essentially is a higher-order cast).
 
-* In a similar vein, encapsulation must be forward-compatible with the addition of explicit casts. It ought to be possible to inject an encapsulated value into `anyref` and cast it back, in order for private types to participate in the same anyref-based type escape hatches as other references, and to avoid more complicated type system machinery. That is, it must be possible to compare with or cast _to_ a private type, but not _through_ it.
+* In a similar vein, encapsulation must be forward-compatible with the addition of explicit casts. It ought to be possible to inject an encapsulated value into `any` and cast it back, in order for private types to participate in the same anyref-based type escape hatches as other references, and to avoid more complicated type system machinery. That is, it must be possible to compare with or cast _to_ a private type, but not _through_ it.
 
-Together, these requirements and goals necessitate that (1) private types are nominal, in order to distinguish them from one another, (2) values of private type share a representation with other reference types, in order to make private types suitable for imports, and (3) these values have a distinguished representation that maintains enough type information to distinguish them from values of other type.
+Together, these requirements and goals necessitate that (1) private types are nominal, in order to distinguish them from one another, (2) values of private type share a representation with other reference types, in order to make private types suitable for imports, and (3) these values have a distinguished representation that maintains enough information to distinguish them from values of other type.
 The latter in turn necessitates that such values are allocated -- as is typically the case for external, host-implemented references as well
 (once Wasm has other forms of allocation, such as for structs in the [GC proposal](https://github.com/WebAssembly/gc), they can be used for this purpose, avoiding extra levels of indirection, see [below](#forward-compatibility-with-gc-proposal)).
 
-The design does not enable the formation of cycles, so that simple reference counting techniques are applicable and no GC is required (though possible).
+The design for private types does not itself enable the formation of heap cycles, so that simple reference counting techniques are possbile and they can still be implemented in no-GC environments.
 
 
 ### Proposal Summary
 
-* This proposal is based on the [reference types proposal](https://github.com/WebAssembly/reference-types) and the [typed function references proposal](https://github.com/WebAssembly/function-references).
+* This proposal is based on the [reference types proposal](https://github.com/WebAssembly/reference-types), the [typed function references proposal](https://github.com/WebAssembly/function-references), and the type structure in the [GC proposal](https://github.com/WebAssembly/gc).
 
-* A new form of *type import*, `(import "..." "..." (type $t))` allows importing a type definition abstractly.
+* A new form of *type import*, `(import "..." "..." (type $t (sub <absheaptype>)))` allows importing a type definition abstractly.
 
-* An import may specify a subtype constraint to restrict possible instantiations, as in `(import "..." "..." (type $t (sub func)))`.
+* The subtype constraint on the import determines the representation and restricts possible instantiations.
+  (The text format allows to omit the constraint, in which case it defaults to `(sub any)`.)
 
-* Inversely, a new form of *type export*, `(export "..." (type <heaptype>))` allows exporting a type definition.
+* Inversely, a new form of *type export*, `(export "..." (type $t))` allows exporting a type definition.
+
+* Finally, type definitions are generalised to allow arbitrary heap types as definitions, such as `(type $t i31)`.
+
+**Post-MVP:**
 
 * A new form of *private type* definition, `(type $t (private <valtype>*))` allows the definition of types whose definition is hidden outside the exporting module.
 
 * Private types can only be constructed and deconstructed with the pair of instructions `private.new $t`, `private.get $t`, which only validate within the module defining private type `$t`.
 
-* Values of private type are immutable, so it is not possible to construct cycles.
+* Values of private type are immutable, so it is not possible to construct heap cycles.
 
 
 ### Example
 
 Imagine an API for file operations. It could provide a type of file descriptors and operations on them that could be imported as follows:
 ```wasm
-(import "file" "File" (type $File any))
+(import "file" "File" (type $File (sub any)))
 (import "file" "open" (func $open (param $name i32) (result (ref $File))))
 (import "file" "read_byte" (func $read (param (ref $File)) (result i32)))
 (import "file" "close" (func $close (param (ref $File))))
@@ -140,15 +152,6 @@ Based on the following prerequisite proposals:
 
 ### Types
 
-#### Heap Types
-
-[Heap types](https://github.com/WebAssembly/function-references/blob/master/proposals/function-references/Overview.md#types) classify the target of a reference and are extended as follows:
-
-* `any` is a new heap type
-  - `heaptype ::= ... | any`
-  - the type of all importable (and referenceable) types
-
-
 #### Imports
 
 * `type <typetype>` is an import description with a type constraint
@@ -159,19 +162,14 @@ Based on the following prerequisite proposals:
   - `typetype ::= sub <heaptype>`
   - `(sub <heaptype>) ok` iff `<heaptype> ok`
   - Note: there may be other kinds of type descriptions in the future
+  - Note: In the MVP the bound is syntactically restricted to _abstract_ heap types (which excludes type indices, and therefor concrete defined types)
 
-* Type imports share the usual type index space, and are inserted in order of appearance.
-
-* There are additional side conditions on the ordering of type imports and definitions: they can be interleaved, but they are ordered; a type import may only be referenced by later declarations; this ensures that import bounds cannot form a non-productive definitional cycle; consecutive type definitions OTOH may be mutually recursive (the exact details of these rules are TBD and may be relaxed in future versions of Wasm; cf. Module Linking proposal).
-
-Question: For the first version of this extension, we may want to restrict import bounds to abstract heap types like `any` or `func`. Concrete types are unlikely to be useful as bounds without the richer type language from the GC proposal.
+* Type imports share the usual type index space, and are inserted in order of appearance, before all internal type definitions.
 
 
 #### Definitions
 
-* `deftype` is a new category of *defined types* that generalises the contents of the type section
-  - `deftype ::= <functype> | <privatetype>`
-  - `module ::= {..., types vec(<deftype>)}`
+**Post-MVP:**
 
 * `private <valtype>*` is a new form of type definition
   - `privatetype ::= private <valtype>*`
@@ -182,13 +180,10 @@ Question: For the first version of this extension, we may want to restrict impor
 
 #### Exports
 
-* `type <heaptype>` is an export description
-  - `exportdesc ::= ... | type <heaptype>`
-  - `(type <heaptype>) ok` iff `<heaptype> ok`
-  - the definition of an export type is transparently observable outside the module, unless it is defined as a private type
-
-Question: This does not allow exposing the definition of a private type to cooperating "friend" modules.
-As a more flexible alternative, hiding the definition could be optional via an explicit annotation on type exports.
+* `type <typeidx>` is an export description
+  - `exportdesc ::= ... | type <typeidx>`
+  - `(type <typeidx>) ok` iff `<typeidx> ok`
+  - Note: the definition of an export type is transparently observable outside the module, unless it is defined as a private type
 
 
 #### Subtyping
@@ -199,12 +194,14 @@ The following rule extends the rules for [typed references](https://github.com/W
   - `(type $t) <: <heaptype>`
     - iff `$t = import (sub <heaptype>)`
 
-* Every heap type is a subtype of `any`
-  - `<heaptype> <: any`
-  - Note: this rule could be restricted to an ad-hoc subset of heap types, but at least needs to include `extern` and private types.
+**Post-MVP:**
+
+* Private types are subtypes of `any`
+  - `(type $t) <: any`
+    - iff `$t = private <valtype>*`
 
 Note: There are no subtyping rules for private types other than the generic `any` supertype.
-Nominal subtyping would be a possible extension, but is left out for now for the sake of simplicity.
+(Nominal) subtyping would be a possible extension, but is left out for now for the sake of simplicity.
 
 
 #### Instantiation
@@ -220,13 +217,15 @@ The Wasm semantics potentially performs runtime type checks in at least two plac
 * `ref.test`/`ref.cast`, to compare source and target type (GC proposal)
 
 In both these cases, a private type is differentiated from its representation. That is, when defining `(type $t (private i32))`, the reference type `(ref $t)` is unrelated to `(ref i32)` (if that existed).
-Likewise, two private types are always distinct from each other, such that invoking `rtt.canon` with to distinct private types creates distinct runtime types.
+Likewise, two private types are always distinct from each other, i.e., they have distinct runtime types.
 
 At the same time, `$t` is still a subtype of `any`, and can e.g. be used in place of an unconstrained type import, like with the file module example above.
 Moreover, this implies that `(ref $t)` is a subtype of `(ref any)`, so that the latter could be downcast to the former under the GC proposal.
 
 
 ### Instructions
+
+**Post-MVP:**
 
 There are only two new instructions, for creating and accessing values of private type, respectively:
 
@@ -256,44 +255,51 @@ The following *external kind* is added:
 
 #### Import section
 
-The import section is extended to include type imports by extending an`import_entry` as follows:
+The import section is extended to include type imports by extending an `importdesc` as follows:
 
 If the `kind` is `Type`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | `type_type` | the type being imported |
+| `type` | `typetype` | the type being imported |
+
+
+* In the binary format, an additional import section may appear _before_ the type section. This section may only containt type imports. In contrast, the import section after the type section may not contain any type imports. (They both use the same section id and format, however. This is to remain forward-compatible with a possible relaxation of section order.)
 
 #### Export section
 
-The export section is extended to reference type imports by extending an `export_entry` as follows:
+The export section is extended to reference type imports by extending an `exportdesc` as follows:
 
 If the `kind` is `Type`:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `type` | `heap_type (s33)` | a heap type to export (as type indices are heap types, can also be an index) |
+| `type` | `typeidx (s33)` | a heap type to export (as type indices are heap types, can also be an index) |
+
+Note: The type index is represented as an s33 in order to allow future generalisations to arbitrary heap types.
 
 #### Type type
 
-Each `type_type` has the fields:
+Each `typetype` has the fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `import_kind` | `u8` | The kind of a type import |
-| `bound` | `heap_type (s33)` | The heap type that is a bound for the type import |
+| `boundkind` | `u8` | The kind of a type import bound |
+| `bound` | `heaptype` | The heap type that is a bound for the type import |
 
-An `import_kind` can take the following value:
+An `boundkind` can take the following value:
 
 | Name      | Value | Description |
 |-----------|-------|----------------|
-| Sub | 1     | An import that is a subtype of the bound |
+| `sub` | 0     | An import that is a subtype of the bound |
+
+Note: Other forms of bounds may be added in the future.
 
 
 ## Forward Compatibility with GC Proposal
 
-The notion of private type definition is similar to an immutable struct, as per the GC proposal.
-It would be possible to later define structs in the [GC proposal](https://github.com/WebAssembly/gc) as a generalisation of private types as follows:
+The notion of private type definition is similar to an immutable struct, as per the  [GC proposal](https://github.com/WebAssembly/gc).
+It would be possible to unify structs and private types as follows:
 
 * Private types are reinterpreted as a special case of a struct definition, albeit a nominal one.
   That is,
@@ -333,7 +339,9 @@ It would be possible to later define structs in the [GC proposal](https://github
 
 ## JS API
 
-* Values of private type materialise as frozen objects with no (public) own properties.
-
 * Question: do we need to add a `WebAssembly.Type` class to the JS API?
-  - constructor `new WebAssembly.Type(name)` creates unique abstract type
+  - constructor `new WebAssembly.Type(name)` would create a unique host type
+
+**Post-MVP:**
+
+* Like other GC type values of private type materialise as frozen objects with no (public) own properties.
